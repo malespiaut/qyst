@@ -1,0 +1,15 @@
+# Build artifacts
+qyst
+main_sdl3
+*.o
+*.out
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
