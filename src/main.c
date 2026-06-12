@@ -101,6 +101,24 @@ game_draw(game_manager_t* gm)
 }
 
 static void
+handle_click(game_manager_t* gm, int x, int y)
+{
+  for (usize i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i){
+    clickbox_t * cb = gm->scene[gm->scene_current]->clickbox[i];
+    SDL_Rect r = cb->bounds;
+    if ((x >= r.x) && (x <= (r.x + r.w)) &&
+      (y >= r.y) && (y <= (r.y + r.h))) {
+      log_debug("Click inside of clickbox %d, switching to scene \"%s\"", i, gm->scene[cb->scene_id]->name);
+    gm->scene_current = cb->scene_id;
+    return;
+      }
+  }
+
+  log_debug("Click outside of any clickbox");
+
+}
+
+static void
 events_process(game_manager_t* gm)
 {
   SDL_Event event = {0};
@@ -108,17 +126,21 @@ events_process(game_manager_t* gm)
   /* Event handling */
   while (SDL_PollEvent(&event))
   {
-    if (event.type == SDL_EVENT_QUIT)
-    {
-      gm->quit = true;
-    }
-    /* Add other event handling here (keyboard, mouse, etc.) */
-    if (event.type == SDL_EVENT_KEY_DOWN)
-    {
-      if (event.key.key == SDLK_ESCAPE)
-      {
+    switch (event.type) {
+
+      case SDL_EVENT_QUIT:
         gm->quit = true;
-      }
+        break;
+      /* Add other event handling here (keyboard, mouse, etc.) */
+      case SDL_EVENT_KEY_DOWN:
+        if (event.key.key == SDLK_ESCAPE)
+        {
+          gm->quit = true;
+        }
+        break;
+      case SDL_EVENT_MOUSE_BUTTON_UP:
+        handle_click(gm, event.button.x, event.button.y);
+        break;
     }
   }
 }
@@ -541,7 +563,7 @@ static void
 game_init(game_manager_t* gm)
 {
   // gm->scenes_path = "scenes.sexp";
-  sexp_t* scenes = scenes_load("scenes.sexp");
+  sexp_t* scenes = scenes_load("data/scenes.sexp");
   gm->scene_count = scenes_count(scenes);
 
   sexp_t* scene = scenes->list;
