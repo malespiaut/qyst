@@ -40,3 +40,4 @@ Run the executable:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 The logging library (`src/log.h`) is copyright (c) 2020 rxi.
+The PL_MPEG library (`src/pl_mpeg.h`) is from [Dominic Szablewski](https://phoboslab.org).

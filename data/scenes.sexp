@@ -9,6 +9,7 @@
         (bounds 128 72 100 100)
         (scene "scene-2")
         (sound "assets/sounds/click.wav")
+        (video "assets/clips/01.mpg")
       )
     )
     (sprites ())

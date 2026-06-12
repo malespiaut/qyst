@@ -5,6 +5,9 @@
 
 #include <sexp.h>
 
+#define PL_MPEG_IMPLEMENTATION
+#include "pl_mpeg.h"
+
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
@@ -31,6 +34,7 @@ struct clickbox_s
 {
   SDL_Rect bounds;
   i32 scene_id;
+  plm_t *video;
   MIX_Audio* sound;
   /* SDL_Rect bounds_original; */
 };
@@ -55,12 +59,26 @@ struct game_manager_s
 {
   screen_manager_t screen;
   bool quit;
+  bool video_playing;
+  plm_t *video_player;
+  SDL_Texture *video_texture;
+  SDL_FRect video_rectangle;
+  double last_time;
   usize scene_count;
   usize scene_current;
   SDL_Point mouse_position;
   // char* scenes_path;
   scene_t** scene;
 };
+
+static void
+on_video(plm_t *player, plm_frame_t *frame, void *user)
+{
+  game_manager_t *gm = (game_manager_t *) user;
+
+  SDL_UpdateYUVTexture(gm->video_texture, NULL, frame->y.data, frame->y.width, frame->cb.data, frame->cb.width, frame->cr.data,  frame->cr.width);
+
+}
 
 static void
 scene_draw(game_manager_t* gm)
@@ -94,10 +112,63 @@ game_draw(game_manager_t* gm)
   // SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255); /* White */
   // SDL_RenderFillRect(gm->screen.renderer, &rect);
 
+
   SDL_RenderClear(gm->screen.renderer);
-  scene_draw(gm);
+  if (gm->video_playing)
+  {
+    SDL_RenderTexture(gm->screen.renderer, gm->video_texture, &gm->video_rectangle, &gm->video_rectangle);
+  } else
+  {
+    scene_draw(gm);
+  }
   // SDL_RenderTexture(gm->screen.renderer, gm->screen.texture, NULL, NULL);
   SDL_RenderPresent(gm->screen.renderer);
+}
+
+static void
+play_video(game_manager_t* gm, plm_t *video)
+{
+  gm->video_playing = true;
+  gm->video_player = video;
+  gm->video_texture = SDL_CreateTexture(
+    gm->screen.renderer,
+    SDL_PIXELFORMAT_IYUV,
+    SDL_TEXTUREACCESS_STREAMING,
+    plm_get_width(video),
+    plm_get_height(video)
+  ); // TODO: free, lol
+
+  gm->video_rectangle.w = plm_get_width(video);
+  gm->video_rectangle.h = plm_get_height(video);
+
+
+  gm->last_time = (double)SDL_GetTicks() / 1000.0;
+
+  log_debug("Playing video");
+}
+
+void
+update_video(game_manager_t* gm)
+{
+  if (plm_has_ended(gm->video_player)) {
+    plm_rewind(gm->video_player);
+    gm->video_playing = false;
+    log_debug("Video ended");
+  }
+
+  // From pl_mpeg example:
+  // Compute the delta time since the last app_update(), limit max step to
+  // 1/30th of a second
+  double current_time = (double)SDL_GetTicks() / 1000.0;
+  double elapsed_time = current_time - gm->last_time;
+  if (elapsed_time > 1.0 / 30.0) {
+    elapsed_time = 1.0 / 30.0;
+  }
+  gm->last_time = current_time;
+
+  plm_decode(gm->video_player, elapsed_time);
+  // log_debug("vid time : %lf", plm_get_time(gm->video_player));
+
 }
 
 static void
@@ -107,11 +178,15 @@ handle_click(game_manager_t* gm, int x, int y)
     clickbox_t * cb = gm->scene[gm->scene_current]->clickbox[i];
     SDL_Rect r = cb->bounds;
     if ((x >= r.x) && (x <= (r.x + r.w)) &&
-      (y >= r.y) && (y <= (r.y + r.h))) {
+      (y >= r.y) && (y <= (r.y + r.h)))
+    {
       log_debug("Click inside of clickbox %d, switching to scene \"%s\"", i, gm->scene[cb->scene_id]->name);
-    gm->scene_current = cb->scene_id;
-    return;
+      gm->scene_current = cb->scene_id;
+      if (cb->video) {
+        play_video(gm, cb->video);
       }
+      return;
+    }
   }
 
   log_debug("Click outside of any clickbox");
@@ -139,11 +214,16 @@ events_process(game_manager_t* gm)
         }
         break;
       case SDL_EVENT_MOUSE_BUTTON_UP:
-        handle_click(gm, event.button.x, event.button.y);
+        if (!gm->video_playing)
+        {
+          handle_click(gm, event.button.x, event.button.y);
+        }
         break;
     }
+
   }
 }
+
 
 // TODO: REVIEW!!!!!!!
 static usize
@@ -295,9 +375,25 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
       // scene_music_load(scene, cursor->list->next->val);
     }
 
+    // Clip
+    else if (!strncmp(type, "video", 5) && is_value(cursor->list->next))
+    {
+      char *path = cursor->list->next->val;
+      cb->video = plm_create_with_filename(path);
+      if (!cb->video)
+      {
+        log_error("Couldn't open '%s'", path);
+        exit(EXIT_FAILURE);
+      }
+      plm_set_audio_enabled(cb->video, false);
+      plm_set_video_decode_callback(cb->video, on_video, gm);
+    }
+
     cursor = cursor->next;
   }
 }
+
+
 
 static void
 clickboxes_init(scene_t* scene)
@@ -324,6 +420,7 @@ clickboxes_init(scene_t* scene)
     memset(scene->clickbox[i], -1, sizeof(clickbox_t));
     // `sound` is a pointer
     scene->clickbox[i]->sound = 0;
+    scene->clickbox[i]->video = NULL;
   }
 
   log_debug("%ld clickboxes have been successfuly allocated!", scene->clickbox_count);
@@ -557,6 +654,10 @@ game_update(game_manager_t* gm)
   char buffer[256] = {0};
   sprintf(buffer, "X:%d, Y:%d", gm->mouse_position.x, gm->mouse_position.y);
   SDL_SetWindowTitle(gm->screen.window, buffer);
+  if (gm->video_playing)
+  {
+    update_video(gm);
+  }
 }
 
 static void
