@@ -17,6 +17,7 @@
 // #include "str.h"
 #include "types.h"
 
+#define kWindowTitle "QYST - Development build"
 #define kScreenWidth 640
 #define kScreenHeight 480
 
@@ -369,6 +370,10 @@ events_process(game_manager_t* gm)
         {
           gm->debug = !gm->debug;
           log_debug("Debug mode %s", gm->debug ? "ACTIVATED" : "DEACTIVATED");
+          if (!gm->debug)
+          {
+            SDL_SetWindowTitle(gm->screen.window, kWindowTitle);
+          }
         }
         break;
         if (event.key.key == SDLK_ESCAPE)
@@ -806,9 +811,10 @@ game_update(game_manager_t* gm)
   gm->mouse_position.x = (i32)mouse_fposition.x;
   gm->mouse_position.y = (i32)mouse_fposition.y;
 
+  if (gm->debug)
   {
     char buffer[256] = {0};
-    sprintf(buffer, "X:%d, Y:%d", gm->mouse_position.x, gm->mouse_position.y);
+    sprintf(buffer, "DEBUG MODE - %d clickboxes - Mouse (%d;%d)", gm->scene[gm->scene_current]->clickbox_count, gm->mouse_position.x, gm->mouse_position.y);
     SDL_SetWindowTitle(gm->screen.window, buffer);
   }
 
@@ -870,7 +876,7 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
-  gm.screen.window = SDL_CreateWindow("Myst-like engine", kScreenWidth, kScreenHeight, 0);
+  gm.screen.window = SDL_CreateWindow(kWindowTitle, kScreenWidth, kScreenHeight, 0);
   if (!gm.screen.window)
   {
     SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Can't create a window with the specified dimensions and flags: %s\n", SDL_GetError());
