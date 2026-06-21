@@ -3,19 +3,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-prototypes"
 #include <sexp.h>
-#pragma GCC diagnostic pop
-
-#define PL_MPEG_IMPLEMENTATION
-#include "pl_mpeg.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
+#define PL_MPEG_IMPLEMENTATION
+#include "pl_mpeg.h"
+
 #include "log.h"
-#include "str.h"
+
+// My includes
+// #include "str.h"
 #include "types.h"
 
 #define kScreenWidth 640
@@ -31,13 +30,10 @@ enum gamestate_e
 };
 typedef enum gamestate_e gamestate_t;
 
-enum todo_e
-{
-  eTodoPlayVideo = 1u << 0,
-  eTodoPlayAudio = 1u << 1,
-  eTodoSetScene = 1u << 2
-};
-typedef enum todo_e todo_t;
+#define bmTodoPlayVideo (1u << 0)
+#define bmTodoPlayAudio (1u << 1)
+#define bmTodoSetScene (1u << 2)
+typedef u32 todo_t;
 
 typedef struct stack_s stack_t;
 struct stack_s
@@ -107,6 +103,7 @@ struct game_manager_s
   gamestate_t gamestate;
 };
 
+/*
 u32 palette_websafe[216];
 
 static void
@@ -135,13 +132,16 @@ palette_websafe_init_pro(void)
     }
   }
 }
+*/
 
 static void
 on_video(plm_t* player, plm_frame_t* frame, void* user)
 {
+  (void)player;
+
   game_manager_t* gm = (game_manager_t*)user;
 
-  SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, frame->y.width, frame->cb.data, frame->cb.width, frame->cr.data, frame->cr.width);
+  SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, (i32)frame->y.width, frame->cb.data, (i32)frame->cb.width, frame->cr.data, (i32)frame->cr.width);
 }
 
 static void
@@ -188,7 +188,7 @@ game_draw(game_manager_t* gm)
     if ((video_width < kScreenWidth) && (video_height < kScreenHeight))
     {
       // Render the video centered
-      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &(SDL_FRect){.x = (kScreenWidth - video_width) / 2, .y = (kScreenHeight - video_height) / 2, .w = video_width, .h = video_height});
+      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &(SDL_FRect){.x = (f32)((kScreenWidth - video_width) / 2), .y = (f32)((kScreenHeight - video_height) / 2), .w = (f32)video_width, .h = (f32)video_height});
     }
     else
     {
@@ -216,15 +216,15 @@ play_video(game_manager_t* gm, plm_t* video)
     plm_get_width(video),
     plm_get_height(video)); // TODO: free, lol
 
-  gm->video.rectangle.w = plm_get_width(video);
-  gm->video.rectangle.h = plm_get_height(video);
+  gm->video.rectangle.w = (f32)plm_get_width(video);
+  gm->video.rectangle.h = (f32)plm_get_height(video);
 
   gm->last_time = (double)SDL_GetTicks() / 1000.0;
 
   log_debug("Playing video");
 }
 
-void
+static void
 update_video(game_manager_t* gm)
 {
   if (plm_has_ended(gm->video.player))
@@ -254,22 +254,22 @@ todo_process(game_manager_t* gm)
 {
   if (gm->todo)
   {
-    if ((gm->todo & eTodoPlayVideo) && (gm->gamestate != eGamestateVideo))
+    if ((gm->todo & bmTodoPlayVideo) && (gm->gamestate != eGamestateVideo))
     {
       gm->gamestate = eGamestateVideo;
 
       play_video(gm, gm->stack.video);
     }
 
-    if (!(gm->todo & eTodoPlayVideo) && (gm->todo & eTodoPlayAudio) && (gm->gamestate != eGamestateAudio))
+    if (!(gm->todo & bmTodoPlayVideo) && (gm->todo & bmTodoPlayAudio) && (gm->gamestate != eGamestateAudio))
     {
       gm->gamestate = eGamestateAudio;
 
       // Clearing out the *play audio* flag
-      gm->todo &= ~eTodoPlayAudio;
+      gm->todo &= ~bmTodoPlayAudio;
     }
 
-    if (!(gm->todo & eTodoPlayVideo) && !(gm->todo & eTodoPlayAudio) && (gm->todo & eTodoSetScene))
+    if (!(gm->todo & bmTodoPlayVideo) && !(gm->todo & bmTodoPlayAudio) && (gm->todo & bmTodoSetScene))
     {
       gm->scene_current = gm->stack.scene_id;
       gm->gamestate = eGamestatePlay;
@@ -284,7 +284,7 @@ todo_process(game_manager_t* gm)
 static void
 handle_click(game_manager_t* gm, i32 x, i32 y)
 {
-  for (usize i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i)
+  for (i32 i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i)
   {
     clickbox_t* cb = gm->scene[gm->scene_current]->clickbox[i];
     SDL_Rect r = cb->bounds;
@@ -295,17 +295,17 @@ handle_click(game_manager_t* gm, i32 x, i32 y)
 
       if (cb->video)
       {
-        gm->todo |= eTodoPlayVideo;
+        gm->todo |= bmTodoPlayVideo;
         gm->stack.video = cb->video;
       }
       if (cb->audio)
       {
-        gm->todo |= eTodoPlayAudio;
+        gm->todo |= bmTodoPlayAudio;
         gm->stack.audio = cb->audio;
       }
       if (cb->scene_id)
       {
-        gm->todo |= eTodoSetScene;
+        gm->todo |= bmTodoSetScene;
         gm->stack.scene_id = cb->scene_id;
       }
 
@@ -340,8 +340,10 @@ events_process(game_manager_t* gm)
       case SDL_EVENT_MOUSE_BUTTON_UP:
         if (!gm->video.playing)
         {
-          handle_click(gm, event.button.x, event.button.y);
+          handle_click(gm, (i32)event.button.x, (i32)event.button.y);
         }
+        break;
+      default:
         break;
     }
   }
@@ -445,11 +447,11 @@ is_value(sexp_t* s)
 static i32
 scene_id_find(game_manager_t* gm, char* scene_name)
 {
-  for (usize i = 0; i < gm->scene_count; ++i)
+  for (i32 i = 0; i < gm->scene_count; ++i)
   {
     if (gm->scene[i]->name && !strcmp(gm->scene[i]->name, scene_name))
     {
-      return i;
+      return (i32)i;
     }
   }
   log_error("Target \"%s\" doesn't exist!", scene_name);
@@ -520,14 +522,14 @@ clickboxes_init(scene_t* scene)
 {
   log_debug("Allocation space for clickboxes");
 
-  scene->clickbox = malloc(sizeof(clickbox_t*) * scene->clickbox_count);
+  scene->clickbox = malloc(sizeof(clickbox_t*) * (usize)scene->clickbox_count);
   if (!scene->clickbox)
   {
     perror("ERROR: clickbox_init(): Couldn't allocate clickbox memory!");
     exit(EXIT_FAILURE);
   }
 
-  for (usize i = 0; i < scene->clickbox_count; ++i)
+  for (i32 i = 0; i < scene->clickbox_count; ++i)
   {
     scene->clickbox[i] = malloc(sizeof(clickbox_t));
     if (!scene->clickbox[i])
@@ -633,7 +635,7 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
 
       clickboxes_init(scene);
 
-      for (usize i = 0; i < scene->clickbox_count; ++i)
+      for (i32 i = 0; i < scene->clickbox_count; ++i)
       {
         clickbox_parse(gm, cursor_cb, scene->clickbox[i]);
 
@@ -710,7 +712,6 @@ scenes_load(char* path)
   // Processing loaded sexp file
 
   sexp_t* sexp = parse_sexp(buffer, bytes_read);
-  free(buffer);
 
   if (!sexp)
   {
@@ -718,7 +719,9 @@ scenes_load(char* path)
     free(buffer);
     exit(EXIT_FAILURE);
   }
+
   log_debug("Scenes parsed successfully!");
+  free(buffer);
 
   log_debug("Checking if scenes are strucrured collectly");
   if (sexp->ty != SEXP_LIST)
@@ -735,14 +738,14 @@ scenes_init(game_manager_t* gm, sexp_t* scene)
 {
   log_debug("Allocation space for scenes");
 
-  gm->scene = malloc(sizeof(scene_t*) * gm->scene_count);
+  gm->scene = malloc(sizeof(scene_t*) * (usize)gm->scene_count);
   if (!gm->scene)
   {
     perror("ERROR: scenes_init(): Couldn't allocate scene memory!");
     exit(EXIT_FAILURE);
   }
 
-  for (usize i = 0; i < gm->scene_count; ++i)
+  for (i32 i = 0; i < gm->scene_count; ++i)
   {
     gm->scene[i] = malloc(sizeof(scene_t));
     if (!gm->scene[i])
@@ -754,7 +757,7 @@ scenes_init(game_manager_t* gm, sexp_t* scene)
   }
 
   log_debug("Setting scenes names");
-  for (usize i = 0; i < gm->scene_count; ++i)
+  for (i32 i = 0; i < gm->scene_count; ++i)
   {
     gm->scene[i]->name = scene->list->val;
     scene = scene->next;
@@ -784,11 +787,10 @@ game_update(game_manager_t* gm)
       {
         update_video(gm);
       }
-
       else
       {
         // If video is finished playing, clearing out the *play video* flag
-        gm->todo &= ~eTodoPlayVideo;
+        gm->todo &= ~bmTodoPlayVideo;
       }
       break;
     case eGamestateAudio:
@@ -808,7 +810,7 @@ game_init(game_manager_t* gm)
 
   sexp_t* scene = scenes->list;
   scenes_init(gm, scene);
-  for (usize i = 0; i < gm->scene_count; ++i)
+  for (i32 i = 0; i < gm->scene_count; ++i)
   {
     scene_parse(gm, scene, gm->scene[i]);
     scene = scene->next;
