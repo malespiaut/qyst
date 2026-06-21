@@ -31,6 +31,7 @@ enum gamestate_e
 };
 typedef enum gamestate_e gamestate_t;
 
+// bitmask
 #define bmTodoNothing 0
 #define bmTodoPlayVideo (1u << 0)
 #define bmTodoPlayAudio (1u << 1)
@@ -61,7 +62,6 @@ struct clickbox_s
   i32 scene_id;
   plm_t* video;
   MIX_Audio* audio;
-  // SDL_Rect bounds_original;
 };
 
 typedef struct scene_s scene_t;
@@ -103,6 +103,8 @@ struct game_manager_s
   stack_t stack;
 
   gamestate_t gamestate;
+
+  bool debug;
 };
 
 /*
@@ -149,35 +151,26 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
 static void
 scene_draw(game_manager_t* gm)
 {
-  // SDL_Rect r = {.x = 0, .y = 0, .w = kScreenWidth, .h = kScreenHeight};
-
-  // SDL_BlitSurface(gm->scene[gm->scene_current]->background, 0, gm->screen.surface, 0);
-
-  /*
-  if (!SDL_UpdateTexture(gm->screen.texture, NULL, gm->scene[gm->scene_current]->background->pixels, sizeof(u32)*kScreenWidth))
-  {
-    SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Can't update the given texture rectangle with new pixel data: %s\n", SDL_GetError());
-    SDL_DestroyWindow(gm->screen.window);
-    SDL_Quit();
-    exit(SDL_APP_FAILURE);
-  }
-  */
   SDL_RenderTexture(gm->screen.renderer, gm->scene[gm->scene_current]->background_texture, NULL, NULL);
-  // SDL_UpdateWindowSurface(gm->screen.window);
+}
+
+static void
+clickboxes_draw(game_manager_t* gm)
+{
+  for (i32 i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i)
+  {
+    clickbox_t* cb = gm->scene[gm->scene_current]->clickbox[i];
+    SDL_Rect r = cb->bounds;
+    SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    SDL_RenderRect(gm->screen.renderer, &(SDL_FRect){.x = (f32)r.x, .y = (f32)r.y, .w = (f32)r.w, .h = (f32)r.h});
+  }
+  // Reset color
+  SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255);
 }
 
 static void
 game_draw(game_manager_t* gm)
 {
-  // Drawing
-  // SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255); //Black
-  // SDL_RenderClear(gm->screen.renderer);
-
-  // Example: Draw a white rectangle
-  // SDL_FRect rect = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
-  // SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255); // White
-  // SDL_RenderFillRect(gm->screen.renderer, &rect);
-
   SDL_RenderClear(gm->screen.renderer);
 
   // Always render the scene
@@ -200,9 +193,12 @@ game_draw(game_manager_t* gm)
   }
   else
   {
+    if (gm->debug)
+    {
+      clickboxes_draw(gm);
+    }
     // TODO: Draw cursor and font only when the video isn't playing
   }
-  // SDL_RenderTexture(gm->screen.renderer, gm->screen.texture, NULL, NULL);
   SDL_RenderPresent(gm->screen.renderer);
 }
 
@@ -360,18 +356,21 @@ static void
 events_process(game_manager_t* gm)
 {
   SDL_Event event = {0};
-
-  // Event handling
   while (SDL_PollEvent(&event))
   {
     switch (event.type)
     {
-
       case SDL_EVENT_QUIT:
         gm->quit = true;
         break;
       // Add other event handling here (keyboard, mouse, etc.)
       case SDL_EVENT_KEY_DOWN:
+        if (event.key.key == SDLK_F1)
+        {
+          gm->debug = !gm->debug;
+          log_debug("Debug mode %s", gm->debug ? "ACTIVATED" : "DEACTIVATED");
+        }
+        break;
         if (event.key.key == SDLK_ESCAPE)
         {
           gm->quit = true;
@@ -544,16 +543,6 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
     {
       char* path = cursor->list->next->val;
       cb->video = video_load(gm, path);
-      /*
-      cb->video = plm_create_with_filename(path);
-      if (!cb->video)
-      {
-        log_error("Couldn't open '%s'", path);
-        exit(EXIT_FAILURE);
-      }
-      plm_set_audio_enabled(cb->video, false);
-      plm_set_video_decode_callback(cb->video, video_decode_callback, gm);
-      */
     }
 
     cursor = cursor->next;
@@ -864,6 +853,8 @@ game_init(game_manager_t* gm)
 
   gm->todo |= bmTodoPlayVideo;
   gm->gamestate = eGamestateIntro;
+
+  gm->debug = false;
 }
 
 int
