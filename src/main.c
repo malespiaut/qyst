@@ -375,7 +375,6 @@ events_process(game_manager_t* gm)
             SDL_SetWindowTitle(gm->screen.window, kWindowTitle);
           }
         }
-        break;
         if (event.key.key == SDLK_ESCAPE)
         {
           gm->quit = true;
