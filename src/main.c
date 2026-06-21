@@ -3,7 +3,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-prototypes"
 #include <sexp.h>
+#pragma GCC diagnostic pop
 
 #define PL_MPEG_IMPLEMENTATION
 #include "pl_mpeg.h"
@@ -20,6 +23,30 @@
 
 bool g_quit = false;
 
+enum gamestate_e
+{
+  eGamestateVideo = 1u << 0,
+  eGamestateAudio = 1u << 1,
+  eGamestatePlay = 1u << 2
+};
+typedef enum gamestate_e gamestate_t;
+
+enum todo_e
+{
+  eTodoPlayVideo = 1u << 0,
+  eTodoPlayAudio = 1u << 1,
+  eTodoSetScene = 1u << 2
+};
+typedef enum todo_e todo_t;
+
+typedef struct stack_s stack_t;
+struct stack_s
+{
+  plm_t* video;
+  MIX_Audio* audio;
+  i32 scene_id;
+};
+
 typedef struct screen_manager_s screen_manager_t;
 struct screen_manager_s
 {
@@ -34,9 +61,9 @@ struct clickbox_s
 {
   SDL_Rect bounds;
   i32 scene_id;
-  plm_t *video;
-  MIX_Audio* sound;
-  /* SDL_Rect bounds_original; */
+  plm_t* video;
+  MIX_Audio* audio;
+  // SDL_Rect bounds_original;
 };
 
 typedef struct scene_s scene_t;
@@ -47,11 +74,18 @@ struct scene_s
   SDL_Surface* background;
   SDL_Texture* background_texture;
   clickbox_t** clickbox;
-  usize clickbox_count;
-  MIX_Audio* song;
-  char* song_path;
-  /* sprite_t sprite; */
-  /* i32 spritecount; */
+  i32 clickbox_count;
+  MIX_Audio* music;
+  char* music_path;
+};
+
+typedef struct video_s video_t;
+struct video_s
+{
+  bool playing;
+  plm_t* player;
+  SDL_Texture* texture;
+  SDL_FRect rectangle;
 };
 
 typedef struct game_manager_s game_manager_t;
@@ -59,25 +93,55 @@ struct game_manager_s
 {
   screen_manager_t screen;
   bool quit;
-  bool video_playing;
-  plm_t *video_player;
-  SDL_Texture *video_texture;
-  SDL_FRect video_rectangle;
   double last_time;
-  usize scene_count;
-  usize scene_current;
+  i32 scene_count;
+  i32 scene_current;
+
   SDL_Point mouse_position;
   // char* scenes_path;
   scene_t** scene;
+  video_t video;
+  todo_t todo;
+  stack_t stack;
+
+  gamestate_t gamestate;
 };
 
+u32 palette_websafe[216];
+
 static void
-on_video(plm_t *player, plm_frame_t *frame, void *user)
+palette_websafe_init_pro(void)
 {
-  game_manager_t *gm = (game_manager_t *) user;
+  static const u8 levels[6] = {0x00, 0x33, 0x66, 0x99, 0xcc, 0xff};
 
-  SDL_UpdateYUVTexture(gm->video_texture, NULL, frame->y.data, frame->y.width, frame->cb.data, frame->cb.width, frame->cr.data,  frame->cr.width);
+  usize i = 0;
 
+  for (usize g = 0; g < 6; ++g)
+  {
+    for (usize b = 0; b < 6; ++b)
+    {
+      for (usize r = 0; r < 6; ++r)
+      {
+        u32 rr = (u32)levels[r];
+        u32 gg = (u32)levels[g];
+        u32 bb = (u32)levels[b];
+
+        palette_websafe[i++] =
+          0xff000000u |
+          (rr << 16) |
+          (gg << 8) |
+          (bb);
+      }
+    }
+  }
+}
+
+static void
+on_video(plm_t* player, plm_frame_t* frame, void* user)
+{
+  game_manager_t* gm = (game_manager_t*)user;
+
+  SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, frame->y.width, frame->cb.data, frame->cb.width, frame->cr.data, frame->cr.width);
 }
 
 static void
@@ -103,44 +167,57 @@ scene_draw(game_manager_t* gm)
 static void
 game_draw(game_manager_t* gm)
 {
-  /* Drawing */
-  // SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255); /* Black */
+  // Drawing
+  // SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255); //Black
   // SDL_RenderClear(gm->screen.renderer);
 
-  /* Example: Draw a white rectangle */
+  // Example: Draw a white rectangle
   // SDL_FRect rect = {0.0f, 0.0f, kScreenWidth, kScreenHeight};
-  // SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255); /* White */
+  // SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255); // White
   // SDL_RenderFillRect(gm->screen.renderer, &rect);
 
-
   SDL_RenderClear(gm->screen.renderer);
-  if (gm->video_playing)
+
+  // Always render the scene
+  scene_draw(gm);
+  if (gm->video.playing)
   {
-    SDL_RenderTexture(gm->screen.renderer, gm->video_texture, &gm->video_rectangle, &gm->video_rectangle);
-  } else
+    i32 video_width = plm_get_width(gm->video.player);
+    i32 video_height = plm_get_height(gm->video.player);
+    // If the video is not of the same resolution of the screen
+    if ((video_width < kScreenWidth) && (video_height < kScreenHeight))
+    {
+      // Render the video centered
+      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &(SDL_FRect){.x = (kScreenWidth - video_width) / 2, .y = (kScreenHeight - video_height) / 2, .w = video_width, .h = video_height});
+    }
+    else
+    {
+      // Render the video fullscreen
+      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &gm->video.rectangle);
+    }
+  }
+  else
   {
-    scene_draw(gm);
+    // TODO: Draw cursor and font only when the video isn't playing
   }
   // SDL_RenderTexture(gm->screen.renderer, gm->screen.texture, NULL, NULL);
   SDL_RenderPresent(gm->screen.renderer);
 }
 
 static void
-play_video(game_manager_t* gm, plm_t *video)
+play_video(game_manager_t* gm, plm_t* video)
 {
-  gm->video_playing = true;
-  gm->video_player = video;
-  gm->video_texture = SDL_CreateTexture(
+  gm->video.playing = true;
+  gm->video.player = video;
+  gm->video.texture = SDL_CreateTexture(
     gm->screen.renderer,
     SDL_PIXELFORMAT_IYUV,
     SDL_TEXTUREACCESS_STREAMING,
     plm_get_width(video),
-    plm_get_height(video)
-  ); // TODO: free, lol
+    plm_get_height(video)); // TODO: free, lol
 
-  gm->video_rectangle.w = plm_get_width(video);
-  gm->video_rectangle.h = plm_get_height(video);
-
+  gm->video.rectangle.w = plm_get_width(video);
+  gm->video.rectangle.h = plm_get_height(video);
 
   gm->last_time = (double)SDL_GetTicks() / 1000.0;
 
@@ -150,9 +227,10 @@ play_video(game_manager_t* gm, plm_t *video)
 void
 update_video(game_manager_t* gm)
 {
-  if (plm_has_ended(gm->video_player)) {
-    plm_rewind(gm->video_player);
-    gm->video_playing = false;
+  if (plm_has_ended(gm->video.player))
+  {
+    plm_rewind(gm->video.player);
+    gm->video.playing = false;
     log_debug("Video ended");
   }
 
@@ -161,36 +239,81 @@ update_video(game_manager_t* gm)
   // 1/30th of a second
   double current_time = (double)SDL_GetTicks() / 1000.0;
   double elapsed_time = current_time - gm->last_time;
-  if (elapsed_time > 1.0 / 30.0) {
+  if (elapsed_time > 1.0 / 30.0)
+  {
     elapsed_time = 1.0 / 30.0;
   }
   gm->last_time = current_time;
 
-  plm_decode(gm->video_player, elapsed_time);
-  // log_debug("vid time : %lf", plm_get_time(gm->video_player));
-
+  plm_decode(gm->video.player, elapsed_time);
+  // log_debug("vid time : %lf", plm_get_time(gm->video.player));
 }
 
 static void
-handle_click(game_manager_t* gm, int x, int y)
+todo_process(game_manager_t* gm)
 {
-  for (usize i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i){
-    clickbox_t * cb = gm->scene[gm->scene_current]->clickbox[i];
+  if (gm->todo)
+  {
+    if ((gm->todo & eTodoPlayVideo) && (gm->gamestate != eGamestateVideo))
+    {
+      gm->gamestate = eGamestateVideo;
+
+      play_video(gm, gm->stack.video);
+    }
+
+    if (!(gm->todo & eTodoPlayVideo) && (gm->todo & eTodoPlayAudio) && (gm->gamestate != eGamestateAudio))
+    {
+      gm->gamestate = eGamestateAudio;
+
+      // Clearing out the *play audio* flag
+      gm->todo &= ~eTodoPlayAudio;
+    }
+
+    if (!(gm->todo & eTodoPlayVideo) && !(gm->todo & eTodoPlayAudio) && (gm->todo & eTodoSetScene))
+    {
+      gm->scene_current = gm->stack.scene_id;
+      gm->gamestate = eGamestatePlay;
+
+      // Clearing out everything
+      memset(&gm->stack, 0, sizeof(stack_t));
+      gm->todo = 0;
+    }
+  }
+}
+
+static void
+handle_click(game_manager_t* gm, i32 x, i32 y)
+{
+  for (usize i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i)
+  {
+    clickbox_t* cb = gm->scene[gm->scene_current]->clickbox[i];
     SDL_Rect r = cb->bounds;
     if ((x >= r.x) && (x <= (r.x + r.w)) &&
-      (y >= r.y) && (y <= (r.y + r.h)))
+        (y >= r.y) && (y <= (r.y + r.h)))
     {
       log_debug("Click inside of clickbox %d, switching to scene \"%s\"", i, gm->scene[cb->scene_id]->name);
-      gm->scene_current = cb->scene_id;
-      if (cb->video) {
-        play_video(gm, cb->video);
+
+      if (cb->video)
+      {
+        gm->todo |= eTodoPlayVideo;
+        gm->stack.video = cb->video;
       }
+      if (cb->audio)
+      {
+        gm->todo |= eTodoPlayAudio;
+        gm->stack.audio = cb->audio;
+      }
+      if (cb->scene_id)
+      {
+        gm->todo |= eTodoSetScene;
+        gm->stack.scene_id = cb->scene_id;
+      }
+
       return;
     }
   }
 
   log_debug("Click outside of any clickbox");
-
 }
 
 static void
@@ -198,15 +321,16 @@ events_process(game_manager_t* gm)
 {
   SDL_Event event = {0};
 
-  /* Event handling */
+  // Event handling
   while (SDL_PollEvent(&event))
   {
-    switch (event.type) {
+    switch (event.type)
+    {
 
       case SDL_EVENT_QUIT:
         gm->quit = true;
         break;
-      /* Add other event handling here (keyboard, mouse, etc.) */
+      // Add other event handling here (keyboard, mouse, etc.)
       case SDL_EVENT_KEY_DOWN:
         if (event.key.key == SDLK_ESCAPE)
         {
@@ -214,22 +338,20 @@ events_process(game_manager_t* gm)
         }
         break;
       case SDL_EVENT_MOUSE_BUTTON_UP:
-        if (!gm->video_playing)
+        if (!gm->video.playing)
         {
           handle_click(gm, event.button.x, event.button.y);
         }
         break;
     }
-
   }
 }
 
-
 // TODO: REVIEW!!!!!!!
-static usize
+static i32
 clickboxes_count(sexp_t* s)
 {
-  usize result = 0;
+  i32 result = 0;
 
   log_debug("Counting the number of clickboxes");
 
@@ -300,7 +422,7 @@ scene_music_load(scene_t* scene, char* path)
     exit(EXIT_FAILURE);
   }
   */
-  scene->song_path = path;
+  scene->music_path = path;
 }
 
 static bool
@@ -378,7 +500,7 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
     // Clip
     else if (!strncmp(type, "video", 5) && is_value(cursor->list->next))
     {
-      char *path = cursor->list->next->val;
+      char* path = cursor->list->next->val;
       cb->video = plm_create_with_filename(path);
       if (!cb->video)
       {
@@ -392,8 +514,6 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
     cursor = cursor->next;
   }
 }
-
-
 
 static void
 clickboxes_init(scene_t* scene)
@@ -418,8 +538,8 @@ clickboxes_init(scene_t* scene)
 
     // -1 means unset
     memset(scene->clickbox[i], -1, sizeof(clickbox_t));
-    // `sound` is a pointer
-    scene->clickbox[i]->sound = 0;
+    // `audio` is a pointer
+    scene->clickbox[i]->audio = 0;
     scene->clickbox[i]->video = NULL;
   }
 
@@ -438,10 +558,10 @@ is_next_element_list(sexp_t* s)
   return (s->list->next && s->list->next->ty == SEXP_LIST);
 }
 
-static usize
+static i32
 scenes_count(sexp_t* s)
 {
-  usize result = 0;
+  i32 result = 0;
 
   log_debug("Counting the number of scenes");
 
@@ -651,12 +771,31 @@ game_update(game_manager_t* gm)
   gm->mouse_position.x = (i32)mouse_fposition.x;
   gm->mouse_position.y = (i32)mouse_fposition.y;
 
-  char buffer[256] = {0};
-  sprintf(buffer, "X:%d, Y:%d", gm->mouse_position.x, gm->mouse_position.y);
-  SDL_SetWindowTitle(gm->screen.window, buffer);
-  if (gm->video_playing)
   {
-    update_video(gm);
+    char buffer[256] = {0};
+    sprintf(buffer, "X:%d, Y:%d", gm->mouse_position.x, gm->mouse_position.y);
+    SDL_SetWindowTitle(gm->screen.window, buffer);
+  }
+
+  switch (gm->gamestate)
+  {
+    case eGamestateVideo:
+      if (gm->video.playing)
+      {
+        update_video(gm);
+      }
+
+      else
+      {
+        // If video is finished playing, clearing out the *play video* flag
+        gm->todo &= ~eTodoPlayVideo;
+      }
+      break;
+    case eGamestateAudio:
+      break;
+    case eGamestatePlay:
+    default:
+      break;
   }
 }
 
@@ -715,9 +854,19 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
+  // These calls are optional
+  // They only serves to make the pixels square and clean when resizing the window
+  if (!SDL_SetRenderVSync(gm.screen.renderer, SDL_RENDERER_VSYNC_ADAPTIVE))
+  {
+    fprintf(stderr, "SDL_SetRenderVSync() failed: %s", SDL_GetError());
+  }
   if (!SDL_SetRenderLogicalPresentation(gm.screen.renderer, kScreenWidth, kScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE))
   {
-    SDL_LogWarn(SDL_LOG_CATEGORY_RENDER, "Can't set a device-independent resolution and presentation mode for rendering: %s\n", SDL_GetError());
+    fprintf(stderr, "SDL_SetRenderLogicalPresentation() failed: %s", SDL_GetError());
+  }
+  if (!SDL_SetDefaultTextureScaleMode(gm.screen.renderer, SDL_SCALEMODE_NEAREST))
+  {
+    fprintf(stderr, "SDL_SetDefaultTextureScaleMode() failed: %s", SDL_GetError());
   }
 
   // TODO: HARDEN!
@@ -729,6 +878,7 @@ main(void)
   while (!gm.quit)
   {
     events_process(&gm);
+    todo_process(&gm);
     game_update(&gm);
     game_draw(&gm);
   }
