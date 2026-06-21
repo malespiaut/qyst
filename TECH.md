@@ -1,6 +1,6 @@
 # QYST technical documentation
 
-## Medias
+## Medias
 
 QYST uses standard and basic medias to avoid code overhead, and also because
 “perfect is the enemy of good”: WAV for sounds and music, BMP for still images,
@@ -11,7 +11,7 @@ Those formats where used back in the day.
 Althought BMP and WAV are raw formats, QYST v1.1 plan to support ZIP archives.
 That way, all of the data will be compressed.
 
-## Videos
+### Videos
 
 Qyst uses MPEG-1 videos, because it's a public domain codec, that is easy to use
 with FFMpeg to encode videos, and Dominic Szablewski's PL_MPEG to decode them.
