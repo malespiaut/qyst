@@ -26,10 +26,12 @@ enum gamestate_e
 {
   eGamestateVideo = 1u << 0,
   eGamestateAudio = 1u << 1,
-  eGamestatePlay = 1u << 2
+  eGamestatePlay = 1u << 2,
+  eGamestateIntro = 1u << 3
 };
 typedef enum gamestate_e gamestate_t;
 
+#define bmTodoNothing 0
 #define bmTodoPlayVideo (1u << 0)
 #define bmTodoPlayAudio (1u << 1)
 #define bmTodoSetScene (1u << 2)
@@ -135,7 +137,7 @@ palette_websafe_init_pro(void)
 */
 
 static void
-on_video(plm_t* player, plm_frame_t* frame, void* user)
+video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
 {
   (void)player;
 
@@ -204,8 +206,24 @@ game_draw(game_manager_t* gm)
   SDL_RenderPresent(gm->screen.renderer);
 }
 
+static plm_t*
+video_load(game_manager_t* gm, const char* path)
+{
+  plm_t* result = plm_create_with_filename(path);
+  if (!result)
+  {
+    log_error("Couldn't open '%s'", path);
+    exit(EXIT_FAILURE);
+  }
+
+  plm_set_audio_enabled(result, false);
+  plm_set_video_decode_callback(result, video_decode_callback, gm);
+
+  return result;
+}
+
 static void
-play_video(game_manager_t* gm, plm_t* video)
+video_play(game_manager_t* gm, plm_t* video)
 {
   gm->video.playing = true;
   gm->video.player = video;
@@ -225,7 +243,7 @@ play_video(game_manager_t* gm, plm_t* video)
 }
 
 static void
-update_video(game_manager_t* gm)
+video_update(game_manager_t* gm)
 {
   if (plm_has_ended(gm->video.player))
   {
@@ -250,39 +268,61 @@ update_video(game_manager_t* gm)
 }
 
 static void
-todo_process(game_manager_t* gm)
+gamestate_process(game_manager_t* gm)
 {
-  if (gm->todo)
+  switch (gm->gamestate)
   {
-    if ((gm->todo & bmTodoPlayVideo) && (gm->gamestate != eGamestateVideo))
-    {
-      gm->gamestate = eGamestateVideo;
+    case eGamestateIntro:
+      if (!gm->video.playing)
+      {
+        gm->gamestate = eGamestatePlay;
+        gm->todo = bmTodoNothing;
+      }
+      break;
 
-      play_video(gm, gm->stack.video);
-    }
+    case eGamestatePlay:
+      if (gm->todo)
+      {
+        if ((gm->todo & bmTodoPlayVideo))
+        {
+          gm->gamestate = eGamestateVideo;
 
-    if (!(gm->todo & bmTodoPlayVideo) && (gm->todo & bmTodoPlayAudio) && (gm->gamestate != eGamestateAudio))
-    {
-      gm->gamestate = eGamestateAudio;
+          video_play(gm, gm->stack.video);
+        }
+        else if ((gm->todo & bmTodoPlayAudio))
+        {
+          gm->gamestate = eGamestateAudio;
 
-      // Clearing out the *play audio* flag
-      gm->todo &= ~bmTodoPlayAudio;
-    }
+          // Clearing out the *play audio* flag
+          gm->todo &= ~bmTodoPlayAudio;
+        }
+        else if ((gm->todo & bmTodoSetScene))
+        {
+          gm->scene_current = gm->stack.scene_id;
+          gm->gamestate = eGamestatePlay;
 
-    if (!(gm->todo & bmTodoPlayVideo) && !(gm->todo & bmTodoPlayAudio) && (gm->todo & bmTodoSetScene))
-    {
-      gm->scene_current = gm->stack.scene_id;
-      gm->gamestate = eGamestatePlay;
+          // Clearing out everything
+          memset(&gm->stack, 0, sizeof(stack_t));
+          gm->todo = 0;
+        }
+      }
+      break;
 
-      // Clearing out everything
-      memset(&gm->stack, 0, sizeof(stack_t));
-      gm->todo = 0;
-    }
+    case eGamestateVideo:
+      if (!gm->video.playing)
+      {
+        gm->gamestate = eGamestatePlay;
+        // Video is done playing
+        gm->todo &= ~bmTodoPlayVideo;
+      }
+    case eGamestateAudio:
+    default:
+      break;
   }
 }
 
 static void
-handle_click(game_manager_t* gm, i32 x, i32 y)
+click_process(game_manager_t* gm, i32 x, i32 y)
 {
   for (i32 i = 0; i < gm->scene[gm->scene_current]->clickbox_count; ++i)
   {
@@ -340,7 +380,7 @@ events_process(game_manager_t* gm)
       case SDL_EVENT_MOUSE_BUTTON_UP:
         if (!gm->video.playing)
         {
-          handle_click(gm, (i32)event.button.x, (i32)event.button.y);
+          click_process(gm, (i32)event.button.x, (i32)event.button.y);
         }
         break;
       default:
@@ -503,6 +543,8 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
     else if (!strncmp(type, "video", 5) && is_value(cursor->list->next))
     {
       char* path = cursor->list->next->val;
+      cb->video = video_load(gm, path);
+      /*
       cb->video = plm_create_with_filename(path);
       if (!cb->video)
       {
@@ -510,7 +552,8 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
         exit(EXIT_FAILURE);
       }
       plm_set_audio_enabled(cb->video, false);
-      plm_set_video_decode_callback(cb->video, on_video, gm);
+      plm_set_video_decode_callback(cb->video, video_decode_callback, gm);
+      */
     }
 
     cursor = cursor->next;
@@ -782,15 +825,11 @@ game_update(game_manager_t* gm)
 
   switch (gm->gamestate)
   {
+    case eGamestateIntro:
     case eGamestateVideo:
       if (gm->video.playing)
       {
-        update_video(gm);
-      }
-      else
-      {
-        // If video is finished playing, clearing out the *play video* flag
-        gm->todo &= ~bmTodoPlayVideo;
+        video_update(gm);
       }
       break;
     case eGamestateAudio:
@@ -799,6 +838,13 @@ game_update(game_manager_t* gm)
     default:
       break;
   }
+}
+
+static void
+intro_play(game_manager_t* gm)
+{
+  plm_t* intro_video = video_load(gm, "data/clips/intro.mpg");
+  video_play(gm, intro_video);
 }
 
 static void
@@ -815,6 +861,9 @@ game_init(game_manager_t* gm)
     scene_parse(gm, scene, gm->scene[i]);
     scene = scene->next;
   }
+
+  gm->todo |= bmTodoPlayVideo;
+  gm->gamestate = eGamestateIntro;
 }
 
 int
@@ -874,18 +923,22 @@ main(void)
   // TODO: HARDEN!
   gm.screen.surface = SDL_GetWindowSurface(gm.screen.window);
 
-  SDL_Log("SDL3 Application Started!");
+  log_debug("SDL3 Application Started!");
 
   game_init(&gm);
+
+  log_debug("Playing intro!");
+  intro_play(&gm);
+
   while (!gm.quit)
   {
     events_process(&gm);
-    todo_process(&gm);
+    gamestate_process(&gm);
     game_update(&gm);
     game_draw(&gm);
   }
 
-  SDL_Log("SDL3 Application Quitting...");
+  log_debug("SDL3 Application Quitting...");
   SDL_DestroyRenderer(gm.screen.renderer);
   SDL_DestroyWindow(gm.screen.window);
   SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO);
