@@ -340,7 +340,7 @@ click_process(game_manager_t* gm, i32 x, i32 y)
         gm->todo |= bmTodoPlayAudio;
         gm->stack.audio = cb->audio;
       }
-      if (cb->scene_id)
+      if (cb->scene_id >= 0)
       {
         gm->todo |= bmTodoSetScene;
         gm->stack.scene_id = cb->scene_id;
@@ -474,7 +474,6 @@ static bool
 is_valid_clickbox(clickbox_t* cb)
 {
   return (
-    (cb->scene_id >= 0) &&
     (cb->bounds.x >= 0) && (cb->bounds.x <= kScreenWidth) &&
     (cb->bounds.y >= 0) && (cb->bounds.y <= kScreenHeight) &&
     ((cb->bounds.x + cb->bounds.w) >= 0) && ((cb->bounds.x + cb->bounds.w) <= kScreenWidth) &&
@@ -574,11 +573,9 @@ clickboxes_init(scene_t* scene)
       exit(EXIT_FAILURE);
     }
 
+    memset(scene->clickbox[i], 0, sizeof(clickbox_t));
     // -1 means unset
-    memset(scene->clickbox[i], -1, sizeof(clickbox_t));
-    // `audio` is a pointer
-    scene->clickbox[i]->audio = 0;
-    scene->clickbox[i]->video = NULL;
+    scene->clickbox[i]->scene_id = -1;
   }
 
   log_debug("%ld clickboxes have been successfuly allocated!", scene->clickbox_count);
