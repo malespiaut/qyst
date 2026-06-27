@@ -108,6 +108,36 @@ struct game_manager_s
   bool debug;
 };
 
+// --- Function prototypes
+
+static bool is_next_element_list(sexp_t* s);
+static bool is_valid_hotspot(hotspot_t* cb);
+static bool is_value(sexp_t* s);
+static i32 hotspots_count(sexp_t* s);
+static i32 scene_id_find(game_manager_t* gm, char* scene_name);
+static i32 scenes_count(sexp_t* s);
+static sexp_t* scenes_load(char* path);
+static void click_process(game_manager_t* gm, i32 x, i32 y);
+static void events_process(game_manager_t* gm);
+static void game_draw(game_manager_t* gm);
+static void game_init(game_manager_t* gm);
+static void game_update(game_manager_t* gm);
+static void gamestate_process(game_manager_t* gm);
+static void hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* cb);
+static void hotspots_draw(game_manager_t* gm);
+static void hotspots_init(scene_t* scene);
+static void intro_play(game_manager_t* gm);
+static void scene_background_load(scene_t* scene, char* path);
+static void scene_draw(game_manager_t* gm);
+static void scene_music_load(scene_t* scene, char* path);
+static void scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene);
+static void scene_texture_load(scene_t* scene, SDL_Renderer* renderer);
+static void scenes_init(game_manager_t* gm, sexp_t* scene);
+static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
+static void video_play(game_manager_t* gm, plm_t* video);
+static void video_update(game_manager_t* gm);
+
+
 /*
 u32 palette_websafe[216];
 
