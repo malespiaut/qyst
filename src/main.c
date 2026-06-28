@@ -79,8 +79,7 @@ struct scene_s
 {
   i32 id;
   char* name;
-  SDL_Surface* background;
-  SDL_Texture* background_texture;
+  SDL_Texture* background;
   hotspot_t* hotspot[8];
   i32 hotspot_count;
   MIX_Audio* music;
@@ -96,6 +95,23 @@ struct video_s
   SDL_FRect rectangle;
 };
 
+enum cursorstate_e
+{
+  eCursorstateIdle,
+  eCursorstateClick,
+  eCursorstateWait
+};
+typedef enum cursorstate_e cursorstate_t;
+
+typedef struct cursor_s cursor_t;
+struct cursor_s
+{
+  SDL_Point hot;
+  SDL_Point position;
+  SDL_Texture* image[3];
+  cursorstate_t state;
+};
+
 typedef struct game_manager_s game_manager_t;
 struct game_manager_s
 {
@@ -105,7 +121,7 @@ struct game_manager_s
   i32 scene_count;
   i32 scene_current;
 
-  SDL_Point mouse_position;
+  cursor_t cursor;
 
   scene_t** scene;
   video_t video;
@@ -133,14 +149,12 @@ static void hotspots_draw(game_manager_t* gm);
 static void intro_play(game_manager_t* gm);
 static bool is_next_element_list(sexp_t* s);
 static bool is_next_element_value(sexp_t* s);
+static bool is_over_hotspot(hotspot_t* hs, i32 x, i32 y);
 static bool is_valid_hotspot(hotspot_t* hs);
 static bool is_value(sexp_t* s);
-static void scene_background_load(scene_t* scene, char* path);
-static void scene_draw(game_manager_t* gm);
 static i32 scene_id_find(game_manager_t* gm, char* scene_name);
 static void scene_music_load(scene_t* scene, char* path);
 static void scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene);
-static void scene_texture_load(scene_t* scene, SDL_Renderer* renderer);
 static i32 scenes_count(sexp_t* s);
 static void scenes_init(game_manager_t* gm, sexp_t* scene);
 static sexp_t* scenes_load(char* path);
@@ -157,12 +171,6 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
   game_manager_t* gm = (game_manager_t*)user;
 
   SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, (i32)frame->y.width, frame->cb.data, (i32)frame->cb.width, frame->cr.data, (i32)frame->cr.width);
-}
-
-static void
-scene_draw(game_manager_t* gm)
-{
-  SDL_RenderTexture(gm->screen.renderer, gm->scene[gm->scene_current]->background_texture, NULL, NULL);
 }
 
 static void
@@ -184,7 +192,9 @@ game_draw(game_manager_t* gm)
 {
   SDL_RenderClear(gm->screen.renderer);
 
-  scene_draw(gm);
+  // -- Draw scene background
+  SDL_RenderTexture(gm->screen.renderer, gm->scene[gm->scene_current]->background, NULL, NULL);
+
   if (gm->video.playing)
   {
     i32 video_width = plm_get_width(gm->video.player);
@@ -207,6 +217,18 @@ game_draw(game_manager_t* gm)
       hotspots_draw(gm);
     }
   }
+
+  // -- Draw cursor
+  {
+    SDL_FRect cursor_draw_rect = {
+      .x = (f32)(gm->cursor.position.x - gm->cursor.hot.x),
+      .y = (f32)(gm->cursor.position.y - gm->cursor.hot.y),
+      .w = 32,
+      .h = 32};
+
+    SDL_RenderTexture(gm->screen.renderer, gm->cursor.image[gm->cursor.state], NULL, &cursor_draw_rect);
+  }
+
   SDL_RenderPresent(gm->screen.renderer);
 }
 
@@ -345,15 +367,28 @@ gamestate_process(game_manager_t* gm)
   }
 }
 
+static bool
+is_over_hotspot(hotspot_t* hs, i32 x, i32 y)
+{
+  SDL_Rect r = hs->bounds;
+  if ((x >= r.x) && (x <= (r.x + r.w)) &&
+      (y >= r.y) && (y <= (r.y + r.h)))
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
 static void
 click_process(game_manager_t* gm, i32 x, i32 y)
 {
   for (i32 i = 0; i < gm->scene[gm->scene_current]->hotspot_count; ++i)
   {
     hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
-    SDL_Rect r = hs->bounds;
-    if ((x >= r.x) && (x <= (r.x + r.w)) &&
-        (y >= r.y) && (y <= (r.y + r.h)))
+    if (is_over_hotspot(hs, x, y))
     {
       gm->stack = &hs->stack;
       gm->stack_size = hs->stack_size;
@@ -403,34 +438,6 @@ events_process(game_manager_t* gm)
       default:
         break;
     }
-  }
-}
-
-static void
-scene_background_load(scene_t* scene, char* path)
-{
-  if (!scene || !path)
-  {
-    log_error("Pointers are NULL!");
-    exit(EXIT_FAILURE);
-  }
-
-  scene->background = SDL_LoadBMP(path);
-  if (!scene->background)
-  {
-    log_error("SDL_LoadBMP couldn't load %s", path);
-    exit(EXIT_FAILURE);
-  }
-}
-
-static void
-scene_texture_load(scene_t* scene, SDL_Renderer* renderer)
-{
-  scene->background_texture = SDL_CreateTextureFromSurface(renderer, scene->background);
-  if (!scene->background_texture)
-  {
-    log_error("Can't create a texture from an existing surface: %s", SDL_GetError());
-    exit(EXIT_FAILURE);
   }
 }
 
@@ -615,8 +622,23 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
     if (!strncmp(type, "background", 10) && is_next_element_value(cursor))
     {
 
-      scene_background_load(scene, cursor->list->next->val);
-      scene_texture_load(scene, gm->screen.renderer);
+      char* path = cursor->list->next->val;
+
+      SDL_Surface* background = SDL_LoadBMP(path);
+      if (!background)
+      {
+        log_error("SDL_LoadBMP couldn't load %s", path);
+        exit(EXIT_FAILURE);
+      }
+
+      scene->background = SDL_CreateTextureFromSurface(gm->screen.renderer, background);
+      if (!scene->background)
+      {
+        log_error("Can't create a texture from an existing surface: %s", SDL_GetError());
+        exit(EXIT_FAILURE);
+      }
+
+      SDL_DestroySurface(background);
     }
 
     else if (!strncmp(type, "music", 5) && is_next_element_value(cursor))
@@ -754,13 +776,40 @@ game_update(game_manager_t* gm)
 {
   SDL_FRect mouse_fposition = {0};
   SDL_GetMouseState(&mouse_fposition.x, &mouse_fposition.y);
-  gm->mouse_position.x = (i32)mouse_fposition.x;
-  gm->mouse_position.y = (i32)mouse_fposition.y;
+  gm->cursor.position.x = (i32)mouse_fposition.x;
+  gm->cursor.position.y = (i32)mouse_fposition.y;
+
+  {
+    bool hot_cursor = false;
+
+    for (i32 i = 0; i < gm->scene[gm->scene_current]->hotspot_count; ++i)
+    {
+      hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
+      if (is_over_hotspot(hs, gm->cursor.position.x, gm->cursor.position.y))
+      {
+        hot_cursor = true;
+        break;
+      }
+    }
+
+    if (gm->video.playing)
+    {
+      gm->cursor.state = eCursorstateWait;
+    }
+    else if (hot_cursor)
+    {
+      gm->cursor.state = eCursorstateClick;
+    }
+    else
+    {
+      gm->cursor.state = eCursorstateIdle;
+    }
+  }
 
   if (gm->debug)
   {
     char buffer[256] = {0};
-    sprintf(buffer, "DEBUG MODE - %d hotspots - Mouse (%d;%d)", gm->scene[gm->scene_current]->hotspot_count, gm->mouse_position.x, gm->mouse_position.y);
+    sprintf(buffer, "DEBUG MODE - %d hotspots - Cursor (%d;%d)", gm->scene[gm->scene_current]->hotspot_count, gm->cursor.position.x, gm->cursor.position.y);
     SDL_SetWindowTitle(gm->screen.window, buffer);
   }
 
@@ -814,6 +863,50 @@ game_init(game_manager_t* gm)
   gm->gamestate = eGamestateIntro;
 
   gm->debug = false;
+
+  // -- Cursors
+  {
+
+    // -- Cursor hot spot
+    gm->cursor.hot.x = 12;
+    gm->cursor.hot.y = 6;
+
+    typedef struct cursortuple_s cursortuple_t;
+    struct cursortuple_s
+    {
+      cursorstate_t state;
+      char* bmp_path;
+    };
+
+    cursortuple_t pairs[3] =
+      {
+        (cursortuple_t){.state = eCursorstateIdle, .bmp_path = "data/cursors/idle.bmp"},
+        (cursortuple_t){.state = eCursorstateClick, .bmp_path = "data/cursors/click.bmp"},
+        (cursortuple_t){.state = eCursorstateWait, .bmp_path = "data/cursors/wait.bmp"}};
+
+    for (usize i = 0; i < 3; ++i)
+    {
+      SDL_Surface* cursor_bmp;
+      if (!(cursor_bmp = SDL_LoadBMP(pairs[i].bmp_path)))
+      {
+        fprintf(stderr, "Unable to load image %s! SDL_image error: %s\n", pairs[i].bmp_path, SDL_GetError());
+        exit(EXIT_FAILURE);
+      }
+
+      // -- Color key color
+      if (!SDL_SetSurfaceColorKey(cursor_bmp, true, SDL_MapRGB(SDL_GetPixelFormatDetails(cursor_bmp->format), NULL, 0xff, 0x00, 0xff)))
+      {
+        fprintf(stderr, "Unable to color key! SDL error: %s", SDL_GetError());
+      }
+
+      if (!(gm->cursor.image[pairs[i].state] = SDL_CreateTextureFromSurface(gm->screen.renderer, cursor_bmp)))
+      {
+        log_error("Can't create a color cursor: %s", SDL_GetError());
+        exit(EXIT_FAILURE);
+      }
+      SDL_DestroySurface(cursor_bmp);
+    }
+  }
 }
 
 int
@@ -868,6 +961,11 @@ main(void)
   if (!SDL_SetDefaultTextureScaleMode(gm.screen.renderer, SDL_SCALEMODE_NEAREST))
   {
     fprintf(stderr, "SDL_SetDefaultTextureScaleMode() failed: %s", SDL_GetError());
+  }
+
+  if (!SDL_HideCursor())
+  {
+    fprintf(stderr, "SDL_HideCursor() failed: %s", SDL_GetError());
   }
 
   gm.screen.surface = SDL_GetWindowSurface(gm.screen.window);
