@@ -1,5 +1,5 @@
 <p align="center">
-![Qyst logo](/docs/qyst_logo.gif)
+  <img src="docs/qyst_logo.gif" alt="Qyst logo" />
 </p>
 
 # Qyst
