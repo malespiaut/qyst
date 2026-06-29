@@ -11,7 +11,7 @@ CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wformat=2 -Wformat-over
 LDFLAGS = -lSDL3 -lSDL3_mixer -lsexp
 
 TARGET = qyst
-SRC = src/main.c
+SRC = src/qyst.c
 OBJ = $(SRC:.c=.o)
 
 .PHONY: all clean
