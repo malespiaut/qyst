@@ -1,7 +1,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -305,7 +304,7 @@ game_stack_pop(game_manager_t* gm)
 {
   if ((gm->stack_idx == gm->stack_size - 1) || (gm->stack_idx == 32 - 1))
   {
-    gm->stack = nullptr;
+    gm->stack = NULL;
     gm->stack_size = 0;
     gm->stack_idx = -1;
 
@@ -332,33 +331,35 @@ gamestate_process(game_manager_t* gm)
       break;
 
     case eGamestateProcess:
-      // This is some weird shenanigans that I don't fully understand
-      // just because I wanted gm->stack to explicitely be a
-      // pointer to an array of 32 cell_t objects, and not just a
-      // poiter to the first element.
-      cell_t c = gm->stack[0][gm->stack_idx];
-
-      switch (c.type)
       {
-        case eStacktypeVideo:
-          gm->gamestate = eGamestateVideo;
-          plm_t* video = video_load(gm, c.data.path);
-          video_play(gm, video);
-          break;
-        case eStacktypeSound:
-          game_stack_pop(gm);
-          break;
-        case eStacktypeText:
-          game_stack_pop(gm);
-          break;
-        case eStacktypeTarget:
-          gm->scene_current = c.data.target;
-          game_stack_pop(gm);
-          break;
-        case eStacktypeNULL:
-          break;
-        default:
-          break;
+        // This is some weird shenanigans that I don't fully understand
+        // just because I wanted gm->stack to explicitely be a
+        // pointer to an array of 32 cell_t objects, and not just a
+        // poiter to the first element.
+        cell_t c = gm->stack[0][gm->stack_idx];
+
+        switch (c.type)
+        {
+          case eStacktypeVideo:
+            gm->gamestate = eGamestateVideo;
+            plm_t* video = video_load(gm, c.data.path);
+            video_play(gm, video);
+            break;
+          case eStacktypeSound:
+            game_stack_pop(gm);
+            break;
+          case eStacktypeText:
+            game_stack_pop(gm);
+            break;
+          case eStacktypeTarget:
+            gm->scene_current = c.data.target;
+            game_stack_pop(gm);
+            break;
+          case eStacktypeNULL:
+            break;
+          default:
+            break;
+        }
       }
       break;
 
