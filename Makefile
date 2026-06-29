@@ -5,7 +5,8 @@ CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wformat=2 -Wformat-over
          -Wshift-overflow=2 -Wcast-qual -Wstringop-overflow=4 -Warith-conversion \
          -Wlogical-op -Wduplicated-cond -Wduplicated-branches -Wstrict-prototypes \
          -Wmissing-prototypes -Wundef -Wstrict-overflow=4 -Wswitch-default \
-         -Wswitch-enum -Wcast-align=strict -O0 -ggdb3 -Isrc -I/usr/include/sfsexp
+         -Wswitch-enum -Wcast-align=strict -O0 -ggdb3 -Isrc -I/usr/include/sfsexp \
+				 -I./external/pl_mpeg -I./external/log/src
 
 LDFLAGS = -lSDL3 -lSDL3_mixer -lsexp
 

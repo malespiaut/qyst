@@ -11,7 +11,7 @@
 #define PL_MPEG_IMPLEMENTATION
 #include "pl_mpeg.h"
 
-#include "log.h"
+#include "log.c"
 
 #include "types.h"
 

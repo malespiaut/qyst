@@ -1,0 +1,6 @@
+[submodule "external/pl_mpeg"]
+	path = external/pl_mpeg
+	url = https://github.com/phoboslab/pl_mpeg
+[submodule "external/log"]
+	path = external/log
+	url = https://github.com/rxi/log.c
