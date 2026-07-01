@@ -5,6 +5,19 @@
     (music "data/sounds/myst.wav")
     (click-boxes
       (
+        (condition "!vid")
+        (bounds 200 200 100 100)
+        (sound "data/sounds/click.wav")
+        (set "vid" true)
+      )
+      (
+        (condition "vid")
+        (bounds 200 200 100 100)
+        (sound "data/sounds/click.wav")
+        (set "vid" false)
+      )
+      (
+        (condition "vid")
         ;;(bounds 0.1 0.1 0.7 0.7)
         (bounds 128 72 100 100)
         (scene "scene-2")

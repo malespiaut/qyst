@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <search.h> // from POSIX, for vars/conditions
+
 #include <sexp.h>
 
 #include <SDL3/SDL.h>
@@ -20,6 +22,8 @@
 #define kWindowTitle "QYST - Development build"
 #define kScreenWidth 640
 #define kScreenHeight 480
+
+#define kMaxVars 256
 
 bool g_quit = false;
 
@@ -56,13 +60,24 @@ struct screen_manager_s
   SDL_Surface* surface;
 };
 
+typedef struct var_set_s var_set_t;
+struct var_set_s
+{
+  char* name;
+  bool value;
+};
+
 typedef struct clickbox_s clickbox_t;
 struct clickbox_s
 {
   SDL_Rect bounds;
+  char* condition;
   i32 scene_id;
   plm_t* video;
   MIX_Audio* audio;
+  i32 set_n;
+  var_set_t* set_array;
+  
 };
 
 typedef struct scene_s scene_t;
@@ -147,6 +162,38 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
   game_manager_t* gm = (game_manager_t*)user;
 
   SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, (i32)frame->y.width, frame->cb.data, (i32)frame->cb.width, frame->cr.data, (i32)frame->cr.width);
+}
+
+static bool
+check_condition(char* condition)
+{
+  bool base = true;
+  if (condition[0] == '!')
+  {
+    base = false;
+    condition++;
+  }
+
+  ENTRY *result = hsearch((ENTRY){.key = condition}, FIND);
+
+  if (result && result->data)
+  {
+    return base;
+  }
+
+  return !base;
+}
+
+static void
+set_var(var_set_t var_set)
+{
+  ENTRY ent = {
+      .key = var_set.name,
+      .data = (void*) var_set.value, // a bool should fit in a void*
+  };
+  ENTRY *result = hsearch(ent, ENTER);
+  //TODO: check
+  result->data = ent.data;
 }
 
 static void
@@ -328,7 +375,13 @@ click_process(game_manager_t* gm, i32 x, i32 y)
     if ((x >= r.x) && (x <= (r.x + r.w)) &&
         (y >= r.y) && (y <= (r.y + r.h)))
     {
-      log_debug("Click inside of clickbox %d, switching to scene \"%s\"", i, gm->scene[cb->scene_id]->name);
+      //TODO: check condition
+      if (cb->condition && !check_condition(cb->condition))
+      {
+          continue;
+      }
+      
+      log_debug("Click inside of clickbox %d, switching to scene \"%s\"", i, (cb->scene_id==-1)?"none":gm->scene[cb->scene_id]->name);
 
       if (cb->video)
       {
@@ -340,10 +393,17 @@ click_process(game_manager_t* gm, i32 x, i32 y)
         gm->todo |= bmTodoPlayAudio;
         gm->stack.audio = cb->audio;
       }
-      if (cb->scene_id)
+      if (cb->scene_id > -1)
       {
         gm->todo |= bmTodoSetScene;
         gm->stack.scene_id = cb->scene_id;
+      }
+      if (cb->set_n > 0)
+      {
+        for (i32 j = 0; j < cb->set_n; ++j)
+        {
+          set_var(cb->set_array[j]);
+        }
       }
 
       return;
@@ -474,7 +534,7 @@ static bool
 is_valid_clickbox(clickbox_t* cb)
 {
   return (
-    (cb->scene_id >= 0) &&
+    //(cb->scene_id >= 0) &&
     (cb->bounds.x >= 0) && (cb->bounds.x <= kScreenWidth) &&
     (cb->bounds.y >= 0) && (cb->bounds.y <= kScreenHeight) &&
     ((cb->bounds.x + cb->bounds.w) >= 0) && ((cb->bounds.x + cb->bounds.w) <= kScreenWidth) &&
@@ -549,6 +609,32 @@ clickbox_parse(game_manager_t* gm, sexp_t* s, clickbox_t* cb)
       cb->video = video_load(gm, path);
     }
 
+    // Condition 
+    else if (!strncmp(type, "condition", 9) && is_value(cursor->list->next))
+    {
+      cb->condition = cursor->list->next->val; //TODO: copy string?
+    }
+
+    // Var setter 
+    else if (!strncmp(type, "set", 3) && is_value(cursor->list->next) && is_value(cursor->list->next->next))
+    {
+      cb->set_array = realloc(cb->set_array, (cb->set_n+1) * sizeof(var_set_t)); //TODO: check, free...
+      var_set_t* set = &cb->set_array[cb->set_n];
+      set->name = cursor->list->next->val; //TODO: copy string?
+      
+      char * char_val = cursor->list->next->next->val;
+      if (!strncmp(char_val, "true", 4))
+      {
+        set->value = true;
+      }
+      else if (!strncmp(char_val, "false", 5))
+      {
+        set->value = false;
+      } //TODO: else invalid value
+
+      cb->set_n++;
+    }
+
     cursor = cursor->next;
   }
 }
@@ -576,9 +662,14 @@ clickboxes_init(scene_t* scene)
 
     // -1 means unset
     memset(scene->clickbox[i], -1, sizeof(clickbox_t));
-    // `audio` is a pointer
-    scene->clickbox[i]->audio = 0;
+    // set pointers to NULL
+    scene->clickbox[i]->audio = NULL;
     scene->clickbox[i]->video = NULL;
+    scene->clickbox[i]->condition = NULL;
+
+    // setup empty var setters array
+    scene->clickbox[i]->set_n = 0;
+    scene->clickbox[i]->set_array = NULL;
   }
 
   log_debug("%ld clickboxes have been successfuly allocated!", scene->clickbox_count);
@@ -921,6 +1012,8 @@ main(void)
 
   log_debug("SDL3 Application Started!");
 
+  hcreate(kMaxVars); // for vars
+  
   game_init(&gm);
 
   log_debug("Playing intro!");
@@ -933,6 +1026,8 @@ main(void)
     game_update(&gm);
     game_draw(&gm);
   }
+
+  hdestroy(); // for vars
 
   log_debug("SDL3 Application Quitting...");
   SDL_DestroyRenderer(gm.screen.renderer);
