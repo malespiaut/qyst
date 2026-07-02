@@ -160,7 +160,7 @@ static void game_init(game_manager_t* gm);
 static void game_stack_pop(game_manager_t* gm);
 static void game_update(game_manager_t* gm);
 static void gamestate_process(game_manager_t* gm);
-static void hotspot_init(scene_t* scene);
+static void hotspot_alloc(scene_t* scene);
 static void hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs);
 static void hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data);
 static void hotspots_draw(game_manager_t* gm);
@@ -602,13 +602,13 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
 }
 
 static void
-hotspot_init(scene_t* scene)
+hotspot_alloc(scene_t* scene)
 {
   scene->hotspot[scene->hotspot_count] = calloc(1, sizeof *scene->hotspot[scene->hotspot_count]);
 
   if (!scene->hotspot[scene->hotspot_count])
   {
-    perror("ERROR: hotspot_init(): Couldn't allocate hotspot memory!");
+    perror("ERROR: hotspot_alloc(): Couldn't allocate hotspot memory!");
     exit(EXIT_FAILURE);
   }
   scene->hotspot_count++;
@@ -703,8 +703,7 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
     {
       sexp_t* cursor_hs = cursor->list->next;
 
-      // TODO: rename `hotspot_init()` to `hotspot_alloc()`
-      hotspot_init(scene);
+      hotspot_alloc(scene);
 
       // -- Hotspot label
       if (!(scene->hotspot[scene->hotspot_count - 1]->label = calloc(cursor->list->next->val_used + 1, 1)))
