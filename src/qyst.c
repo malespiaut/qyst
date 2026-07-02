@@ -82,6 +82,7 @@ struct screen_manager_s
 typedef struct hotspot_s hotspot_t;
 struct hotspot_s
 {
+  char* label;
   SDL_Rect bounds;
   cell_t stack[32];
   isize stack_size;
@@ -147,6 +148,8 @@ struct game_manager_s
 
   bool debug;
 };
+
+game_manager_t* g_gm = NULL;
 
 static void click_process(game_manager_t* gm, i32 x, i32 y);
 static void events_process(game_manager_t* gm);
@@ -665,13 +668,24 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
     {
       sexp_t* cursor_hs = cursor->list->next;
 
+      // TODO: rename `hotspot_init()` to `hotspot_alloc()`
       hotspot_init(scene);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(cursor->list->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(cursor->list->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(cursor->list->next->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(cursor->list->next->next->next->next->val);
 
-      sexp_t* cursor_hs_list = cursor->list->next->next->next->next->next->list;
+      // -- Hotspot label
+      if (!(scene->hotspot[scene->hotspot_count - 1]->label = calloc(cursor->list->next->val_used + 1, 1)))
+      {
+        perror("ERROR: scene_parse(): Couldn't allocate memory!");
+        exit(EXIT_FAILURE);
+      }
+      strncpy(scene->hotspot[scene->hotspot_count - 1]->label, cursor->list->next->val, cursor->list->next->val_used);
+
+      // -- Hotspot boundaries
+      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(cursor->list->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(cursor->list->next->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(cursor->list->next->next->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(cursor->list->next->next->next->next->next->val);
+
+      sexp_t* cursor_hs_list = cursor->list->next->next->next->next->next->next->list;
 
       hotspot_parse(gm, cursor_hs_list, scene->hotspot[scene->hotspot_count - 1]);
 
@@ -775,8 +789,6 @@ scenes_init(game_manager_t* gm, sexp_t* scene)
       perror("ERROR: scenes_init(): Couldn't allocate scene memory!");
       exit(EXIT_FAILURE);
     }
-
-    gm->scene[i]->hotspot_count = 0;
   }
 
   for (i32 i = 0; i < gm->scene_count; ++i)
@@ -872,6 +884,13 @@ game_init(game_manager_t* gm)
     scene = scene->next;
   }
 
+  // TODO: rename `scene_load()` to `script_load()`
+  // TODO: rename `scenes.sexp` to `script.sexp`
+  // TODO: script_unload(scenes);
+  //
+  // TODO: rename `scenes_init()` to `scenes_alloc()`
+  // TODO: rename `scene_parse()` to `scene_init()`
+
   gm->stack_size = 0;
   gm->stack_idx = -1;
 
@@ -927,8 +946,13 @@ game_init(game_manager_t* gm)
 int
 main(void)
 {
+  g_gm = calloc(1, sizeof(*g_gm));
 
-  game_manager_t gm = {0};
+  if (!g_gm)
+  {
+    perror("ERROR: main(): Couldn't allocate game manager memory!");
+    exit(EXIT_FAILURE);
+  }
 
   if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO))
   {
@@ -937,43 +961,43 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
-  gm.screen.window = SDL_CreateWindow(kWindowTitle, kScreenWidth, kScreenHeight, 0);
-  if (!gm.screen.window)
+  g_gm->screen.window = SDL_CreateWindow(kWindowTitle, kScreenWidth, kScreenHeight, 0);
+  if (!g_gm->screen.window)
   {
     SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Can't create a window with the specified dimensions and flags: %s\n", SDL_GetError());
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
 
-  gm.screen.renderer = SDL_CreateRenderer(gm.screen.window, NULL);
-  if (!gm.screen.renderer)
+  g_gm->screen.renderer = SDL_CreateRenderer(g_gm->screen.window, NULL);
+  if (!g_gm->screen.renderer)
   {
     SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Can't create a 2D rendering context for a window: %s\n", SDL_GetError());
-    SDL_DestroyWindow(gm.screen.window);
+    SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
 
-  gm.screen.texture = SDL_CreateTexture(gm.screen.renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, kScreenWidth, kScreenHeight);
-  if (!gm.screen.texture)
+  g_gm->screen.texture = SDL_CreateTexture(g_gm->screen.renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, kScreenWidth, kScreenHeight);
+  if (!g_gm->screen.texture)
   {
     SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Can't create a 2D rendering context for a window: %s\n", SDL_GetError());
-    SDL_DestroyWindow(gm.screen.window);
+    SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
 
   // These calls are optional
   // They only serves to make the pixels square and clean when resizing the window
-  if (!SDL_SetRenderVSync(gm.screen.renderer, SDL_RENDERER_VSYNC_ADAPTIVE))
+  if (!SDL_SetRenderVSync(g_gm->screen.renderer, SDL_RENDERER_VSYNC_ADAPTIVE))
   {
     fprintf(stderr, "SDL_SetRenderVSync() failed: %s", SDL_GetError());
   }
-  if (!SDL_SetRenderLogicalPresentation(gm.screen.renderer, kScreenWidth, kScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE))
+  if (!SDL_SetRenderLogicalPresentation(g_gm->screen.renderer, kScreenWidth, kScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE))
   {
     fprintf(stderr, "SDL_SetRenderLogicalPresentation() failed: %s", SDL_GetError());
   }
-  if (!SDL_SetDefaultTextureScaleMode(gm.screen.renderer, SDL_SCALEMODE_NEAREST))
+  if (!SDL_SetDefaultTextureScaleMode(g_gm->screen.renderer, SDL_SCALEMODE_NEAREST))
   {
     fprintf(stderr, "SDL_SetDefaultTextureScaleMode() failed: %s", SDL_GetError());
   }
@@ -983,22 +1007,22 @@ main(void)
     fprintf(stderr, "SDL_HideCursor() failed: %s", SDL_GetError());
   }
 
-  gm.screen.surface = SDL_GetWindowSurface(gm.screen.window);
+  g_gm->screen.surface = SDL_GetWindowSurface(g_gm->screen.window);
 
-  game_init(&gm);
+  game_init(g_gm);
 
-  intro_play(&gm);
+  intro_play(g_gm);
 
-  while (!gm.quit)
+  while (!g_gm->quit)
   {
-    events_process(&gm);
-    gamestate_process(&gm);
-    game_update(&gm);
-    game_draw(&gm);
+    events_process(g_gm);
+    gamestate_process(g_gm);
+    game_update(g_gm);
+    game_draw(g_gm);
   }
 
-  SDL_DestroyRenderer(gm.screen.renderer);
-  SDL_DestroyWindow(gm.screen.window);
+  SDL_DestroyRenderer(g_gm->screen.renderer);
+  SDL_DestroyWindow(g_gm->screen.window);
   SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO);
   SDL_Quit();
 
