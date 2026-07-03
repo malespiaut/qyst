@@ -173,7 +173,6 @@ static void intro_play(game_manager_t* gm);
 static bool is_next_element_list(sexp_t* s);
 static bool is_next_element_value(sexp_t* s);
 static bool is_over_hotspot(hotspot_t* hs, i32 x, i32 y);
-static bool is_valid_hotspot(hotspot_t* hs);
 static bool is_value(sexp_t* s);
 static i32 scene_id_find(game_manager_t* gm, char* scene_name);
 static void scene_music_load(scene_t* scene, char* path);
@@ -509,16 +508,6 @@ scene_music_load(scene_t* scene, char* path)
   }
 
   scene->music_path = path;
-}
-
-static bool
-is_valid_hotspot(hotspot_t* hs)
-{
-  return (
-    (hs->bounds.x >= 0) && (hs->bounds.x <= kScreenWidth) &&
-    (hs->bounds.y >= 0) && (hs->bounds.y <= kScreenHeight) &&
-    ((hs->bounds.x + hs->bounds.w) >= 0) && ((hs->bounds.x + hs->bounds.w) <= kScreenWidth) &&
-    ((hs->bounds.y + hs->bounds.h) >= 0) && ((hs->bounds.y + hs->bounds.h) <= kScreenHeight));
 }
 
 static bool
