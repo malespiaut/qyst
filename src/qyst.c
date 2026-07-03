@@ -708,12 +708,13 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       strncpy(scene->hotspot[scene->hotspot_count - 1]->label, elem->list->next->val, elem->list->next->val_used);
 
       // -- Hotspot boundaries
-      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(elem->list->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(elem->list->next->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(elem->list->next->next->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(elem->list->next->next->next->next->next->val);
+      sexp_t* bounds = elem->list->next->next->list;
+      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(bounds->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(bounds->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(bounds->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(bounds->next->next->next->val);
 
-      sexp_t* hs_stack = elem->list->next->next->next->next->next->next->list;
+      sexp_t* hs_stack = elem->list->next->next->next->list;
 
       hotspot_parse(gm, hs_stack, scene->hotspot[scene->hotspot_count - 1]);
     }
