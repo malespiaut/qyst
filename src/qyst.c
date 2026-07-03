@@ -177,9 +177,9 @@ static bool is_valid_hotspot(hotspot_t* hs);
 static bool is_value(sexp_t* s);
 static i32 scene_id_find(game_manager_t* gm, char* scene_name);
 static void scene_music_load(scene_t* scene, char* path);
-static void scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene);
+static void scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene);
 static i32 scenes_count(sexp_t* s);
-static void scenes_init(game_manager_t* gm, sexp_t* scene);
+static void scenes_alloc(game_manager_t* gm, sexp_t* scene);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
@@ -658,7 +658,7 @@ scenes_count(sexp_t* s)
 }
 
 static void
-scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
+scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
 {
   if (!s || !scene)
   {
@@ -715,7 +715,7 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
       // -- Hotspot label
       if (!(scene->hotspot[scene->hotspot_count - 1]->label = calloc(cursor->list->next->val_used + 1, 1)))
       {
-        perror("ERROR: scene_parse(): Couldn't allocate memory!");
+        perror("ERROR: scene_init(): Couldn't allocate memory!");
         exit(EXIT_FAILURE);
       }
       strncpy(scene->hotspot[scene->hotspot_count - 1]->label, cursor->list->next->val, cursor->list->next->val_used);
@@ -820,13 +820,13 @@ script_unload(sexp_t* script)
 }
 
 static void
-scenes_init(game_manager_t* gm, sexp_t* scene)
+scenes_alloc(game_manager_t* gm, sexp_t* scene)
 {
   gm->scene = calloc((usize)gm->scene_count, sizeof(*gm->scene));
 
   if (!gm->scene)
   {
-    perror("ERROR: scenes_init(): Couldn't allocate scene memory!");
+    perror("ERROR: scenes_alloc(): Couldn't allocate scene memory!");
     exit(EXIT_FAILURE);
   }
 
@@ -836,7 +836,7 @@ scenes_init(game_manager_t* gm, sexp_t* scene)
 
     if (!gm->scene[i])
     {
-      perror("ERROR: scenes_init(): Couldn't allocate scene memory!");
+      perror("ERROR: scenes_alloc(): Couldn't allocate scene memory!");
       exit(EXIT_FAILURE);
     }
   }
@@ -927,15 +927,12 @@ game_init(game_manager_t* gm)
   gm->scene_count = scenes_count(gm->script);
 
   sexp_t* scene = gm->script->list;
-  scenes_init(gm, scene);
+  scenes_alloc(gm, scene);
   for (i32 i = 0; i < gm->scene_count; ++i)
   {
-    scene_parse(gm, scene, gm->scene[i]);
+    scene_init(gm, scene, gm->scene[i]);
     scene = scene->next;
   }
-
-  // TODO: rename `scenes_init()` to `scenes_alloc()`
-  // TODO: rename `scene_parse()` to `scene_init()`
 
   gm->stack_size = 0;
   gm->stack_idx = -1;
