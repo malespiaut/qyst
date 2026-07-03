@@ -157,7 +157,7 @@ struct game_manager_s
 
 game_manager_t* g_gm = NULL;
 
-static void audio_decode_playback(plm_t* player, plm_samples_t* samples, void* user);
+static void audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user);
 static void click_process(game_manager_t* gm, i32 x, i32 y);
 static void events_process(game_manager_t* gm);
 static void game_draw(game_manager_t* gm);
@@ -198,7 +198,7 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
 }
 
 static void
-audio_decode_playback(plm_t* player, plm_samples_t* samples, void* user)
+audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
 {
   (void)player;
 
@@ -284,8 +284,8 @@ video_load(game_manager_t* gm, const char* path)
 
   if (plm_get_num_audio_streams(player) > 0)
   {
-    plm_set_audio_lead_time(player, (double)4096 / (double)plm_get_samplerate(player)); // A bit arbitrary, but it's a lead time I guess...
-    plm_set_audio_decode_callback(player, audio_decode_playback, gm);
+    plm_set_audio_lead_time(player, 4096.0 / (double)plm_get_samplerate(player)); // A bit arbitrary, but it's a lead time I guess...
+    plm_set_audio_decode_callback(player, audio_decode_callback, gm);
   }
   else
   {
