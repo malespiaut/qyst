@@ -662,16 +662,16 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
     exit(EXIT_FAILURE);
   }
 
-  sexp_t* cursor = s->list->next;
-  while (cursor)
+  sexp_t* elem = s->list->next;
+  while (elem)
   {
-    const char* type = cursor->list->val;
-    const usize str_length = cursor->list->val_used;
+    const char* type = elem->list->val;
+    const usize str_length = elem->list->val_used;
 
-    if (!strncmp(type, "background", str_length) && is_next_element_value(cursor))
+    if (!strncmp(type, "background", str_length) && is_next_element_value(elem))
     {
 
-      char* path = cursor->list->next->val;
+      char* path = elem->list->next->val;
 
       SDL_Surface* background = SDL_LoadBMP(path);
       if (!background)
@@ -690,38 +690,38 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       SDL_DestroySurface(background);
     }
 
-    else if (!strncmp(type, "music", str_length) && is_next_element_value(cursor))
+    else if (!strncmp(type, "music", str_length) && is_next_element_value(elem))
     {
-      scene_music_load(scene, cursor->list->next->val);
+      scene_music_load(scene, elem->list->next->val);
     }
 
-    else if (!strncmp(type, "hotspot", str_length) && is_next_element_value(cursor))
+    else if (!strncmp(type, "hotspot", str_length) && is_next_element_value(elem))
     {
-      sexp_t* cursor_hs = cursor->list->next;
+      sexp_t* elem_hs = elem->list->next;
 
       hotspot_alloc(scene);
 
       // -- Hotspot label
-      if (!(scene->hotspot[scene->hotspot_count - 1]->label = calloc(cursor->list->next->val_used + 1, 1)))
+      if (!(scene->hotspot[scene->hotspot_count - 1]->label = calloc(elem->list->next->val_used + 1, 1)))
       {
         perror("ERROR: scene_init(): Couldn't allocate memory!");
         exit(EXIT_FAILURE);
       }
-      strncpy(scene->hotspot[scene->hotspot_count - 1]->label, cursor->list->next->val, cursor->list->next->val_used);
+      strncpy(scene->hotspot[scene->hotspot_count - 1]->label, elem->list->next->val, elem->list->next->val_used);
 
       // -- Hotspot boundaries
-      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(cursor->list->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(cursor->list->next->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(cursor->list->next->next->next->next->val);
-      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(cursor->list->next->next->next->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(elem->list->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(elem->list->next->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(elem->list->next->next->next->next->val);
+      scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(elem->list->next->next->next->next->next->val);
 
-      sexp_t* cursor_hs_list = cursor->list->next->next->next->next->next->next->list;
+      sexp_t* elem_hs_list = elem->list->next->next->next->next->next->next->list;
 
-      hotspot_parse(gm, cursor_hs_list, scene->hotspot[scene->hotspot_count - 1]);
+      hotspot_parse(gm, elem_hs_list, scene->hotspot[scene->hotspot_count - 1]);
 
-      cursor_hs = cursor_hs->next;
+      elem_hs = elem_hs->next;
     }
-    cursor = cursor->next;
+    elem = elem->next;
   }
 }
 
