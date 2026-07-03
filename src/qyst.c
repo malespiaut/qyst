@@ -204,8 +204,8 @@ audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
 
   game_manager_t* gm = (game_manager_t*)user;
 
-  int size = sizeof(float) * samples->count * 2;
-  if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, size))
+  i32 length = (i32)(sizeof(float) * samples->count * 2);
+  if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, length))
   {
     SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Error outputing audio data: %s", SDL_GetError());
   }
