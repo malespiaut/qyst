@@ -139,7 +139,7 @@ struct game_manager_s
   SDL_AudioStream* audio_stream;
   bool quit;
   double last_time;
-  i32 scene_count;
+  usize scene_count;
   i32 scene_current;
 
   cursor_t cursor;
@@ -179,7 +179,7 @@ static bool is_value(sexp_t* s);
 static i32 scene_id_find(game_manager_t* gm, char* scene_name);
 static void scene_music_load(scene_t* scene, char* path);
 static void scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene);
-static i32 scenes_count(sexp_t* s);
+static usize scenes_count(sexp_t* s);
 static void scenes_alloc(game_manager_t* gm, sexp_t* scene);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
@@ -521,7 +521,7 @@ is_value(sexp_t* s)
 static i32
 scene_id_find(game_manager_t* gm, char* scene_name)
 {
-  for (i32 i = 0; i < gm->scene_count; ++i)
+  for (usize i = 0; i < gm->scene_count; ++i)
   {
     if (!strcmp(gm->scene[i]->name, scene_name))
     {
@@ -623,10 +623,10 @@ is_next_element_list(sexp_t* s)
   return (s->list->next && s->list->next->ty == SEXP_LIST);
 }
 
-static i32
+static usize
 scenes_count(sexp_t* s)
 {
-  i32 result = 0;
+  usize result = 0;
 
   if (!s)
   {
@@ -807,7 +807,7 @@ script_unload(sexp_t* script)
 static void
 scenes_alloc(game_manager_t* gm, sexp_t* scene)
 {
-  gm->scene = calloc((usize)gm->scene_count, sizeof(*gm->scene));
+  gm->scene = calloc(gm->scene_count, sizeof(*gm->scene));
 
   if (!gm->scene)
   {
@@ -815,7 +815,7 @@ scenes_alloc(game_manager_t* gm, sexp_t* scene)
     exit(EXIT_FAILURE);
   }
 
-  for (i32 i = 0; i < gm->scene_count; ++i)
+  for (usize i = 0; i < gm->scene_count; ++i)
   {
     gm->scene[i] = calloc(1, sizeof(*gm->scene[i]));
 
@@ -908,7 +908,7 @@ game_init(game_manager_t* gm)
   scenes_alloc(gm, scene);
 
   // Setting the name of all scenes first
-  for (i32 i = 0; i < gm->scene_count; ++i)
+  for (usize i = 0; i < gm->scene_count; ++i)
   {
     strncpy(gm->scene[i]->name, scene->list->val, scene->list->val_used);
     scene = scene->next;
@@ -916,7 +916,7 @@ game_init(game_manager_t* gm)
 
   // Only then `scene_init()` will be able to link hotspots with scenes
   scene = gm->script->list;
-  for (i32 i = 0; i < gm->scene_count; ++i)
+  for (usize i = 0; i < gm->scene_count; ++i)
   {
     scene_init(gm, scene, gm->scene[i]);
     scene = scene->next;
