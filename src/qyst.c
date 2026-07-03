@@ -581,23 +581,24 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
     if (is_value(s->list->next))
     {
       const char* type = s->list->val;
+      const usize str_length = s->list->val_used;
 
-      if (!strncmp(type, "target", 6))
+      if (!strncmp(type, "target", str_length))
       {
         hotspot_stack_push(hs, eStacktypeTarget, (celldata_t){.target = scene_id_find(gm, s->list->next->val)});
       }
 
-      else if (!strncmp(type, "video", 5))
+      else if (!strncmp(type, "video", str_length))
       {
         hotspot_stack_push(hs, eStacktypeVideo, (celldata_t){.path = s->list->next->val});
       }
 
-      else if (!strncmp(type, "sound", 5))
+      else if (!strncmp(type, "sound", str_length))
       {
         hotspot_stack_push(hs, eStacktypeSound, (celldata_t){.path = s->list->next->val});
       }
 
-      else if (!strncmp(type, "text", 4))
+      else if (!strncmp(type, "text", str_length))
       {
         hotspot_stack_push(hs, eStacktypeText, (celldata_t){.text = s->list->next->val});
       }
@@ -677,8 +678,9 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
   while (cursor)
   {
     const char* type = cursor->list->val;
+    const usize str_length = cursor->list->val_used;
 
-    if (!strncmp(type, "background", 10) && is_next_element_value(cursor))
+    if (!strncmp(type, "background", str_length) && is_next_element_value(cursor))
     {
 
       char* path = cursor->list->next->val;
@@ -700,12 +702,12 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
       SDL_DestroySurface(background);
     }
 
-    else if (!strncmp(type, "music", 5) && is_next_element_value(cursor))
+    else if (!strncmp(type, "music", str_length) && is_next_element_value(cursor))
     {
       scene_music_load(scene, cursor->list->next->val);
     }
 
-    else if (!strncmp(type, "hotspot", 7) && is_next_element_value(cursor))
+    else if (!strncmp(type, "hotspot", str_length) && is_next_element_value(cursor))
     {
       sexp_t* cursor_hs = cursor->list->next;
 
