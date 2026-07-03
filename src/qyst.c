@@ -697,8 +697,6 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
 
     else if (!strncmp(type, "hotspot", str_length) && is_next_element_value(elem))
     {
-      sexp_t* elem_hs = elem->list->next;
-
       hotspot_alloc(scene);
 
       // -- Hotspot label
@@ -715,11 +713,9 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(elem->list->next->next->next->next->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(elem->list->next->next->next->next->next->val);
 
-      sexp_t* elem_hs_list = elem->list->next->next->next->next->next->next->list;
+      sexp_t* hs_stack = elem->list->next->next->next->next->next->next->list;
 
-      hotspot_parse(gm, elem_hs_list, scene->hotspot[scene->hotspot_count - 1]);
-
-      elem_hs = elem_hs->next;
+      hotspot_parse(gm, hs_stack, scene->hotspot[scene->hotspot_count - 1]);
     }
     elem = elem->next;
   }
