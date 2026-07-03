@@ -180,7 +180,7 @@ static i32 scene_id_find(game_manager_t* gm, char* scene_name);
 static void scene_music_load(scene_t* scene, char* path);
 static void scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene);
 static usize scenes_count(sexp_t* s);
-static void scenes_alloc(game_manager_t* gm, sexp_t* scene);
+static void scenes_alloc(game_manager_t* gm);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
@@ -806,7 +806,7 @@ script_unload(sexp_t* script)
 }
 
 static void
-scenes_alloc(game_manager_t* gm, sexp_t* scene)
+scenes_alloc(game_manager_t* gm)
 {
   gm->scene = calloc(gm->scene_count, sizeof(*gm->scene));
 
@@ -905,10 +905,10 @@ game_init(game_manager_t* gm)
   gm->script = script_load("data/script.sexp");
   gm->scene_count = scenes_count(gm->script);
 
-  sexp_t* scene = gm->script->list;
-  scenes_alloc(gm, scene);
+  scenes_alloc(gm);
 
   // Setting the name of all scenes first
+  sexp_t* scene = gm->script->list;
   for (usize i = 0; i < gm->scene_count; ++i)
   {
     strncpy(gm->scene[i]->name, scene->list->val, scene->list->val_used);
