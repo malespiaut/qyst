@@ -32,6 +32,11 @@ typedef size_t usize;
 #define kScreenWidth 640
 #define kScreenHeight 480
 
+#define kCursorWidth 32
+#define kCursorHeight 32
+#define kCursorHotpixelX 12
+#define kCursorHotpixelY 6
+
 bool g_quit = false;
 
 enum gamestate_e
@@ -120,7 +125,6 @@ typedef enum cursorstate_e cursorstate_t;
 typedef struct cursor_s cursor_t;
 struct cursor_s
 {
-  SDL_Point hot;
   SDL_Point position;
   SDL_Texture* image[3];
   cursorstate_t state;
@@ -255,10 +259,10 @@ game_draw(game_manager_t* gm)
   // -- Draw cursor
   {
     SDL_FRect cursor_draw_rect = {
-      .x = (f32)(gm->cursor.position.x - gm->cursor.hot.x),
-      .y = (f32)(gm->cursor.position.y - gm->cursor.hot.y),
-      .w = 32,
-      .h = 32};
+      .x = (f32)(gm->cursor.position.x - kCursorHotpixelX),
+      .y = (f32)(gm->cursor.position.y - kCursorHotpixelY),
+      .w = kCursorWidth,
+      .h = kCursorHeight};
 
     SDL_RenderTexture(gm->screen.renderer, gm->cursor.image[gm->cursor.state], NULL, &cursor_draw_rect);
   }
@@ -942,11 +946,6 @@ game_init(game_manager_t* gm)
 
   // -- Cursors
   {
-
-    // -- Cursor hot spot
-    gm->cursor.hot.x = 12;
-    gm->cursor.hot.y = 6;
-
     typedef struct cursortuple_s cursortuple_t;
     struct cursortuple_s
     {
