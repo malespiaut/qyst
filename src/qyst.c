@@ -130,6 +130,7 @@ typedef struct game_manager_s game_manager_t;
 struct game_manager_s
 {
   screen_manager_t screen;
+  SDL_AudioStream* audio_stream;
   bool quit;
   double last_time;
   i32 scene_count;
@@ -151,6 +152,7 @@ struct game_manager_s
 
 game_manager_t* g_gm = NULL;
 
+static void audio_decode_playback(plm_t *player, plm_samples_t *samples, void *user);
 static void click_process(game_manager_t* gm, i32 x, i32 y);
 static void events_process(game_manager_t* gm);
 static void game_draw(game_manager_t* gm);
@@ -187,6 +189,20 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
   game_manager_t* gm = (game_manager_t*)user;
 
   SDL_UpdateYUVTexture(gm->video.texture, NULL, frame->y.data, (i32)frame->y.width, frame->cb.data, (i32)frame->cb.width, frame->cr.data, (i32)frame->cr.width);
+}
+
+static void
+audio_decode_playback(plm_t *player, plm_samples_t *samples, void *user)
+{
+  (void)player;
+
+  game_manager_t* gm = (game_manager_t*)user;
+
+  int size = sizeof(float) * samples->count * 2;
+  if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, size))
+  {
+    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Error outputing audio data: %s", SDL_GetError());
+  }
 }
 
 static void
@@ -251,17 +267,26 @@ game_draw(game_manager_t* gm)
 static plm_t*
 video_load(game_manager_t* gm, const char* path)
 {
-  plm_t* result = plm_create_with_filename(path);
-  if (!result)
+  plm_t* player = plm_create_with_filename(path);
+  if (!player)
   {
     log_error("Couldn't open '%s'", path);
     exit(EXIT_FAILURE);
   }
 
-  plm_set_audio_enabled(result, false);
-  plm_set_video_decode_callback(result, video_decode_callback, gm);
+  plm_set_video_decode_callback(player, video_decode_callback, gm);
 
-  return result;
+  if (plm_get_num_audio_streams(player) > 0)
+  {
+    plm_set_audio_lead_time(player, (double)4096 / (double)plm_get_samplerate(player)); // A bit arbitrary, but it's a lead time I guess...
+    plm_set_audio_decode_callback(player, audio_decode_playback, gm);
+  }
+  else
+  {
+    plm_set_audio_enabled(player, false);
+  }
+
+  return player;
 }
 
 static void
@@ -280,6 +305,15 @@ video_play(game_manager_t* gm, plm_t* video)
   gm->video.rectangle.h = (f32)plm_get_height(video);
 
   gm->last_time = (double)SDL_GetTicks() / 1000.0;
+
+  SDL_AudioSpec spec = {
+      .format = SDL_AUDIO_F32,
+      .channels = 2,
+      .freq = plm_get_samplerate(video),
+  };
+
+  SDL_SetAudioStreamFormat(gm->audio_stream, &spec, NULL);
+  SDL_ResumeAudioStreamDevice(gm->audio_stream);
 }
 
 static void
@@ -289,6 +323,7 @@ video_update(game_manager_t* gm)
   {
     plm_rewind(gm->video.player);
     gm->video.playing = false;
+    //SDL_PauseAudioStreamDevice(gm->audio_stream);
   }
 
   double current_time = (double)SDL_GetTicks() / 1000.0;
@@ -987,6 +1022,15 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
+  g_gm->audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL, NULL, NULL);
+  if (!g_gm->audio_stream)
+  {
+    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Couldn't create audio stream: %s", SDL_GetError());
+    SDL_DestroyWindow(g_gm->screen.window);
+    SDL_Quit();
+    return SDL_APP_FAILURE;
+  }
+
   // These calls are optional
   // They only serves to make the pixels square and clean when resizing the window
   if (!SDL_SetRenderVSync(g_gm->screen.renderer, SDL_RENDERER_VSYNC_ADAPTIVE))
@@ -1021,6 +1065,7 @@ main(void)
     game_draw(g_gm);
   }
 
+  SDL_DestroyAudioStream(g_gm->audio_stream);
   SDL_DestroyRenderer(g_gm->screen.renderer);
   SDL_DestroyWindow(g_gm->screen.window);
   SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO);
