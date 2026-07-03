@@ -152,12 +152,12 @@ struct game_manager_s
   gamestate_t gamestate;
 
   bool debug;
-sexp_t* script;
+  sexp_t* script;
 };
 
 game_manager_t* g_gm = NULL;
 
-static void audio_decode_playback(plm_t *player, plm_samples_t *samples, void *user);
+static void audio_decode_playback(plm_t* player, plm_samples_t* samples, void* user);
 static void click_process(game_manager_t* gm, i32 x, i32 y);
 static void events_process(game_manager_t* gm);
 static void game_draw(game_manager_t* gm);
@@ -198,7 +198,7 @@ video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
 }
 
 static void
-audio_decode_playback(plm_t *player, plm_samples_t *samples, void *user)
+audio_decode_playback(plm_t* player, plm_samples_t* samples, void* user)
 {
   (void)player;
 
@@ -313,9 +313,9 @@ video_play(game_manager_t* gm, plm_t* video)
   gm->last_time = (double)SDL_GetTicks() / 1000.0;
 
   SDL_AudioSpec spec = {
-      .format = SDL_AUDIO_F32,
-      .channels = 2,
-      .freq = plm_get_samplerate(video),
+    .format = SDL_AUDIO_F32,
+    .channels = 2,
+    .freq = plm_get_samplerate(video),
   };
 
   SDL_SetAudioStreamFormat(gm->audio_stream, &spec, NULL);
@@ -329,7 +329,6 @@ video_update(game_manager_t* gm)
   {
     plm_rewind(gm->video.player);
     gm->video.playing = false;
-    //SDL_PauseAudioStreamDevice(gm->audio_stream);
   }
 
   double current_time = (double)SDL_GetTicks() / 1000.0;
@@ -924,7 +923,6 @@ static void
 game_init(game_manager_t* gm)
 {
 
-  //sexp_t* script = script_load("data/script.sexp");
   gm->script = script_load("data/script.sexp");
   gm->scene_count = scenes_count(gm->script);
 
@@ -1072,7 +1070,7 @@ main(void)
     game_update(g_gm);
     game_draw(g_gm);
   }
-  
+
   script_unload(g_gm->script);
 
   SDL_DestroyAudioStream(g_gm->audio_stream);
