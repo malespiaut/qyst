@@ -37,6 +37,8 @@ typedef size_t usize;
 #define kCursorHotpixelX 12
 #define kCursorHotpixelY 6
 
+#define kStringLength 256
+
 bool g_quit = false;
 
 enum gamestate_e
@@ -97,7 +99,7 @@ typedef struct scene_s scene_t;
 struct scene_s
 {
   i32 id;
-  char* name;
+  char name[kStringLength];
   SDL_Texture* background;
   hotspot_t* hotspot[8];
   i32 hotspot_count;
@@ -521,7 +523,7 @@ scene_id_find(game_manager_t* gm, char* scene_name)
 {
   for (i32 i = 0; i < gm->scene_count; ++i)
   {
-    if (gm->scene[i]->name && !strcmp(gm->scene[i]->name, scene_name))
+    if (!strcmp(gm->scene[i]->name, scene_name))
     {
       return (i32)i;
     }
@@ -659,8 +661,6 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
     log_error("Scene isn't a list!");
     exit(EXIT_FAILURE);
   }
-
-  scene->name = s->list->val;
 
   sexp_t* cursor = s->list->next;
   while (cursor)
@@ -829,12 +829,6 @@ scenes_alloc(game_manager_t* gm, sexp_t* scene)
       exit(EXIT_FAILURE);
     }
   }
-
-  for (i32 i = 0; i < gm->scene_count; ++i)
-  {
-    gm->scene[i]->name = scene->list->val;
-    scene = scene->next;
-  }
 }
 
 static void
@@ -911,12 +905,21 @@ intro_play(game_manager_t* gm)
 static void
 game_init(game_manager_t* gm)
 {
-
   gm->script = script_load("data/script.sexp");
   gm->scene_count = scenes_count(gm->script);
 
   sexp_t* scene = gm->script->list;
   scenes_alloc(gm, scene);
+
+  // Setting the name of all scenes first
+  for (i32 i = 0; i < gm->scene_count; ++i)
+  {
+    strncpy(gm->scene[i]->name, scene->list->val, scene->list->val_used);
+    scene = scene->next;
+  }
+
+  // Only then `scene_init()` will be able to link hotspots with scenes
+  scene = gm->script->list;
   for (i32 i = 0; i < gm->scene_count; ++i)
   {
     scene_init(gm, scene, gm->scene[i]);
