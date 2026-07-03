@@ -148,6 +148,7 @@ struct game_manager_s
   gamestate_t gamestate;
 
   bool debug;
+sexp_t* script;
 };
 
 game_manager_t* g_gm = NULL;
@@ -175,7 +176,8 @@ static void scene_music_load(scene_t* scene, char* path);
 static void scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene);
 static i32 scenes_count(sexp_t* s);
 static void scenes_init(game_manager_t* gm, sexp_t* scene);
-static sexp_t* scenes_load(char* path);
+static sexp_t* script_load(char* path);
+static void script_unload(sexp_t* script);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
 static plm_t* video_load(game_manager_t* gm, const char* path);
 static void video_play(game_manager_t* gm, plm_t* video);
@@ -730,7 +732,7 @@ scene_parse(game_manager_t* gm, sexp_t* s, scene_t* scene)
 }
 
 static sexp_t*
-scenes_load(char* path)
+script_load(char* path)
 {
   if (!path)
   {
@@ -742,7 +744,7 @@ scenes_load(char* path)
   if (!fp)
   {
     char buf[256] = {0};
-    snprintf(buf, sizeof(buf), "ERROR: scenes_load(): Couldn't open %s", path);
+    snprintf(buf, sizeof(buf), "ERROR: script_load(): Couldn't open %s", path);
     perror(buf);
     exit(EXIT_FAILURE);
   }
@@ -750,7 +752,7 @@ scenes_load(char* path)
   if (fseek(fp, 0, SEEK_END))
   {
     char buf[256] = {0};
-    snprintf(buf, sizeof(buf), "ERROR: scenes_load(): Couldn't seek %s", path);
+    snprintf(buf, sizeof(buf), "ERROR: script_load(): Couldn't seek %s", path);
     perror(buf);
     exit(EXIT_FAILURE);
   }
@@ -759,7 +761,7 @@ scenes_load(char* path)
   if (fseek(fp, 0, SEEK_SET))
   {
     char buf[256] = {0};
-    snprintf(buf, sizeof(buf), "ERROR: scenes_load(): Couldn't seek %s", path);
+    snprintf(buf, sizeof(buf), "ERROR: script_load(): Couldn't seek %s", path);
     perror(buf);
     exit(EXIT_FAILURE);
   }
@@ -769,7 +771,7 @@ scenes_load(char* path)
   if (!buffer)
   {
     fclose(fp);
-    perror("ERROR: scenes_load(): Couldn't allocate memory!");
+    perror("ERROR: script_load(): Couldn't allocate memory!");
     exit(EXIT_FAILURE);
   }
 
@@ -778,7 +780,7 @@ scenes_load(char* path)
   if (fclose(fp))
   {
     char buf[256] = {0};
-    snprintf(buf, sizeof(buf), "ERROR: scenes_load(): Couldn't close %s", path);
+    snprintf(buf, sizeof(buf), "ERROR: script_load(): Couldn't close %s", path);
     perror(buf);
     exit(EXIT_FAILURE);
   }
@@ -787,7 +789,7 @@ scenes_load(char* path)
 
   if (!sexp)
   {
-    log_error("Couldn't parse scenes");
+    log_error("Couldn't parse script");
     free(buffer);
     exit(EXIT_FAILURE);
   }
@@ -801,6 +803,15 @@ scenes_load(char* path)
   }
 
   return sexp;
+}
+
+static void
+script_unload(sexp_t* script)
+{
+  if (script)
+  {
+    destroy_sexp(script);
+  }
 }
 
 static void
@@ -907,10 +918,11 @@ static void
 game_init(game_manager_t* gm)
 {
 
-  sexp_t* scenes = scenes_load("data/scenes.sexp");
-  gm->scene_count = scenes_count(scenes);
+  //sexp_t* script = script_load("data/script.sexp");
+  gm->script = script_load("data/script.sexp");
+  gm->scene_count = scenes_count(gm->script);
 
-  sexp_t* scene = scenes->list;
+  sexp_t* scene = gm->script->list;
   scenes_init(gm, scene);
   for (i32 i = 0; i < gm->scene_count; ++i)
   {
@@ -918,10 +930,6 @@ game_init(game_manager_t* gm)
     scene = scene->next;
   }
 
-  // TODO: rename `scene_load()` to `script_load()`
-  // TODO: rename `scenes.sexp` to `script.sexp`
-  // TODO: script_unload(scenes);
-  //
   // TODO: rename `scenes_init()` to `scenes_alloc()`
   // TODO: rename `scene_parse()` to `scene_init()`
 
@@ -1063,6 +1071,8 @@ main(void)
     game_update(g_gm);
     game_draw(g_gm);
   }
+  
+  script_unload(g_gm->script);
 
   SDL_DestroyAudioStream(g_gm->audio_stream);
   SDL_DestroyRenderer(g_gm->screen.renderer);
