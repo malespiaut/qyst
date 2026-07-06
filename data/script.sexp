@@ -10,6 +10,11 @@
         (target "scene-2")
       )
     )
+    (hotspot "Click!" (440 40 100 100)
+      (
+        (sound "data/sounds/click.wav")
+      )
+    )
   )
 
   ;; Scene 2
