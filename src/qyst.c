@@ -107,6 +107,14 @@ struct scene_s
   char* music_path;
 };
 
+typedef struct audio_s audio_t;
+struct audio_s
+{
+  SDL_AudioSpec spec;
+  u8* data;
+  u32 data_len;
+};
+
 typedef struct video_s video_t;
 struct video_s
 {
@@ -145,6 +153,7 @@ struct game_manager_s
   cursor_t cursor;
 
   scene_t** scene;
+  audio_t sound;
   video_t video;
 
   cell_t (*stack)[32];
@@ -390,7 +399,21 @@ gamestate_process(game_manager_t* gm)
             video_play(gm, video);
             break;
           case eStacktypeSound:
-            game_stack_pop(gm);
+            gm->gamestate = eGamestateSound;
+            if (!SDL_LoadWAV(c.data.path, &gm->sound.spec, &gm->sound.data, &gm->sound.data_len))
+            {
+              SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
+              game_stack_pop(gm);
+              break;
+            }
+
+            SDL_SetAudioStreamFormat(gm->audio_stream, &gm->sound.spec, NULL);
+            SDL_ResumeAudioStreamDevice(gm->audio_stream);
+
+            SDL_PutAudioStreamData(gm->audio_stream, gm->sound.data, gm->sound.data_len);
+            SDL_FlushAudioStream(gm->audio_stream);
+
+            SDL_free(gm->sound.data); //TODO: maybe store sound data in memory a bit longer so it can be reused
             break;
           case eStacktypeText:
             game_stack_pop(gm);
@@ -416,6 +439,11 @@ gamestate_process(game_manager_t* gm)
       }
       break;
     case eGamestateSound:
+      if (SDL_GetAudioStreamAvailable(gm->audio_stream) <= 0)
+      {
+        //SDL_PauseAudioStreamDevice(gm->audio_stream);
+        game_stack_pop(gm);
+      }
       break;
     case eGamestateText:
       break;
