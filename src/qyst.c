@@ -410,10 +410,10 @@ gamestate_process(game_manager_t* gm)
             SDL_SetAudioStreamFormat(gm->audio_stream, &gm->sound.spec, NULL);
             SDL_ResumeAudioStreamDevice(gm->audio_stream);
 
-            SDL_PutAudioStreamData(gm->audio_stream, gm->sound.data, gm->sound.data_len);
+            SDL_PutAudioStreamData(gm->audio_stream, gm->sound.data, (i32)gm->sound.data_len);
             SDL_FlushAudioStream(gm->audio_stream);
 
-            SDL_free(gm->sound.data); //TODO: maybe store sound data in memory a bit longer so it can be reused
+            SDL_free(gm->sound.data); // TODO: maybe store sound data in memory a bit longer so it can be reused
             break;
           case eStacktypeText:
             game_stack_pop(gm);
@@ -441,7 +441,7 @@ gamestate_process(game_manager_t* gm)
     case eGamestateSound:
       if (SDL_GetAudioStreamAvailable(gm->audio_stream) <= 0)
       {
-        //SDL_PauseAudioStreamDevice(gm->audio_stream);
+        // SDL_PauseAudioStreamDevice(gm->audio_stream);
         game_stack_pop(gm);
       }
       break;
