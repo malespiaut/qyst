@@ -404,6 +404,7 @@ gamestate_process(game_manager_t* gm)
             {
               SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
               game_stack_pop(gm);
+              break;
             }
 
             SDL_SetAudioStreamFormat(gm->audio_stream, &gm->sound.spec, NULL);
