@@ -77,6 +77,21 @@ struct cell_s
   celldata_t data;
 };
 
+typedef union vec2i_u vec2i_t;
+union vec2i_u
+{
+  struct
+  {
+    i32 x;
+    i32 y;
+  } xy;
+  struct
+  {
+    i32 w;
+    i32 h;
+  } wh;
+};
+
 typedef struct screen_manager_s screen_manager_t;
 struct screen_manager_s
 {
@@ -140,9 +155,22 @@ struct cursor_s
   cursorstate_t state;
 };
 
+typedef struct config_s config_t;
+struct config_s
+{
+  char game_title[kStringLength];
+  bool intro_skip;
+  vec2i_t cursor_size;
+  vec2i_t cursor_hot_pixel;
+  vec2i_t font_size;
+  SDL_Color font_color;
+  bool retro_color_mode;
+};
+
 typedef struct game_manager_s game_manager_t;
 struct game_manager_s
 {
+  config_t config;
   screen_manager_t screen;
   SDL_AudioStream* audio_stream;
   bool quit;
@@ -286,7 +314,7 @@ video_load(game_manager_t* gm, const char* path)
   plm_t* player = plm_create_with_filename(path);
   if (!player)
   {
-    log_error("Couldn't open '%s'", path);
+    log_fatal("Couldn't open '%s'", path);
     exit(EXIT_FAILURE);
   }
 
@@ -533,7 +561,7 @@ scene_music_load(scene_t* scene, char* path)
 {
   if (!scene || !path)
   {
-    log_error("Pointers are NULL!");
+    log_fatal("Pointers are NULL!");
     exit(EXIT_FAILURE);
   }
 
@@ -565,13 +593,13 @@ hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data)
 {
   if (!hs)
   {
-    log_error("Pointer is NULL!");
+    log_fatal("Pointer is NULL!");
     exit(EXIT_FAILURE);
   }
 
   if (hs->stack_size == (32 - 1))
   {
-    log_error("Stack is already full!");
+    log_fatal("Stack is already full!");
     exit(EXIT_FAILURE);
   }
 
@@ -585,12 +613,12 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
 {
   if (!s || !hs)
   {
-    log_error("Pointers are NULL!");
+    log_fatal("Pointers are NULL!");
     exit(EXIT_FAILURE);
   }
   if (s->ty != SEXP_LIST)
   {
-    log_error("Clickbox isn't a list!");
+    log_fatal("Clickbox isn't a list!");
     exit(EXIT_FAILURE);
   }
 
@@ -658,13 +686,13 @@ scenes_count(sexp_t* s)
 
   if (!s)
   {
-    log_error("Pointers are NULL!");
+    log_fatal("Pointers are NULL!");
     exit(EXIT_FAILURE);
   }
 
   if (s->ty != SEXP_LIST)
   {
-    log_error("Scenes aren't correctly structured!");
+    log_fatal("Scenes aren't correctly structured!");
     exit(EXIT_FAILURE);
   }
 
@@ -681,12 +709,12 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
 {
   if (!s || !scene)
   {
-    log_error("Pointers are NULL!");
+    log_fatal("Pointers are NULL!");
     exit(EXIT_FAILURE);
   }
   if (s->ty != SEXP_LIST)
   {
-    log_error("Scene isn't a list!");
+    log_fatal("Scene isn't a list!");
     exit(EXIT_FAILURE);
   }
 
@@ -704,14 +732,14 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       SDL_Surface* background = SDL_LoadBMP(path);
       if (!background)
       {
-        log_error("SDL_LoadBMP couldn't load %s", path);
+        log_fatal("SDL_LoadBMP couldn't load %s", path);
         exit(EXIT_FAILURE);
       }
 
       scene->background = SDL_CreateTextureFromSurface(gm->screen.renderer, background);
       if (!scene->background)
       {
-        log_error("Can't create a texture from an existing surface: %s", SDL_GetError());
+        log_fatal("Can't create a texture from an existing surface: %s", SDL_GetError());
         exit(EXIT_FAILURE);
       }
 
@@ -755,7 +783,7 @@ script_load(char* path)
 {
   if (!path)
   {
-    log_error("Scenes path isn't properly initialized!");
+    log_fatal("Scenes path isn't properly initialized!");
     exit(EXIT_FAILURE);
   }
 
@@ -808,7 +836,7 @@ script_load(char* path)
 
   if (!sexp)
   {
-    log_error("Couldn't parse script");
+    log_fatal("Couldn't parse script");
     free(buffer);
     exit(EXIT_FAILURE);
   }
@@ -817,7 +845,7 @@ script_load(char* path)
 
   if (sexp->ty != SEXP_LIST)
   {
-    log_error("Scenes aren't structured correctly!");
+    log_fatal("Scenes aren't structured correctly!");
     exit(EXIT_FAILURE);
   }
 
@@ -928,6 +956,160 @@ intro_play(game_manager_t* gm)
 }
 
 static void
+config_init(game_manager_t* gm)
+{
+  sexp_t* config = script_load("data/config.sexp");
+
+  sexp_t* s = config->list;
+
+  while (s)
+  {
+    if (s->list->ty == SEXP_VALUE)
+    {
+      const char* type = s->list->val;
+      const usize str_length = s->list->val_used;
+
+      if (!strncmp(type, "game-title", str_length))
+      {
+        strncpy(gm->config.game_title, s->list->next->val, s->list->next->val_used);
+      }
+
+      else if (!strncmp(type, "skip-intro", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.intro_skip = s->list->next->val == 't' ? true : false;
+        }
+        else
+        {
+          log_fatal("Missing `skip-intro` value in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      else if (!strncmp(type, "cursor-size", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.cursor_size.wh.w = atoi(s->list->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `cursor-size` width in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+
+        if (s->list->next->next)
+        {
+          gm->config.cursor_size.wh.h = atoi(s->list->next->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `cursor-size` height in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      else if (!strncmp(type, "cursor-hot-pixel", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.cursor_hot_pixel.xy.x = atoi(s->list->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `cursor-hot-pixel` x in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+
+        if (s->list->next->next)
+        {
+          gm->config.cursor_hot_pixel.xy.y = atoi(s->list->next->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `cursor-hot-pixel` y in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      else if (!strncmp(type, "font-size", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.font_size.wh.w = atoi(s->list->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `font-size` width in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+
+        if (s->list->next->next)
+        {
+          gm->config.font_size.wh.h = atoi(s->list->next->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `font-size` height in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      else if (!strncmp(type, "font-color", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.font_color.r = atoi(s->list->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `font-color` red in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+
+        if (s->list->next->next)
+        {
+          gm->config.font_color.g = atoi(s->list->next->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `font-color` green in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+
+        if (s->list->next->next->next)
+        {
+          gm->config.font_color.b = atoi(s->list->next->next->next->val);
+        }
+        else
+        {
+          log_fatal("Missing `font-color` blue in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+
+      else if (!strncmp(type, "256-color-mode", str_length))
+      {
+        if (s->list->next)
+        {
+          gm->config.retro_color_mode = s->list->next->val == 't' ? true : false;
+        }
+        else
+        {
+          log_fatal("Missing `256-color-mode` value in `data/config.sexp`!");
+          exit(EXIT_FAILURE);
+        }
+      }
+    }
+
+    s = s->next;
+  }
+
+  script_unload(config);
+}
+
+static void
 game_init(game_manager_t* gm)
 {
   gm->script = script_load("data/script.sexp");
@@ -990,7 +1172,7 @@ game_init(game_manager_t* gm)
 
       if (!(gm->cursor.image[pairs[i].state] = SDL_CreateTextureFromSurface(gm->screen.renderer, cursor_bmp)))
       {
-        log_error("Can't create a color cursor: %s", SDL_GetError());
+        log_fatal("Can't create a color cursor: %s", SDL_GetError());
         exit(EXIT_FAILURE);
       }
       SDL_DestroySurface(cursor_bmp);
@@ -1073,6 +1255,7 @@ main(void)
 
   g_gm->screen.surface = SDL_GetWindowSurface(g_gm->screen.window);
 
+  config_init(g_gm);
   game_init(g_gm);
 
   intro_play(g_gm);
@@ -1085,6 +1268,7 @@ main(void)
     game_draw(g_gm);
   }
 
+exit:
   script_unload(g_gm->script);
 
   SDL_DestroyAudioStream(g_gm->audio_stream);
