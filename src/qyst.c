@@ -32,10 +32,8 @@ typedef size_t usize;
 #define kScreenWidth 640
 #define kScreenHeight 480
 
-#define kCursorWidth 32
-#define kCursorHeight 32
-#define kCursorHotpixelX 12
-#define kCursorHotpixelY 6
+#define kScriptPath "data/script.sexp"
+#define kConfigPath "data/config.sexp"
 
 #define kStringLength 256
 
@@ -43,12 +41,12 @@ bool g_quit = false;
 
 enum gamestate_e
 {
-  eGamestatePlay = 1u << 0,
-  eGamestateProcess = 1u << 1,
-  eGamestateVideo = 1u << 2,
-  eGamestateSound = 1u << 3,
-  eGamestateText = 1u << 4,
-  eGamestateIntro = 1u << 5
+  eGamestatePlay,
+  eGamestateProcess = 1u << 0,
+  eGamestateVideo = 1u << 1,
+  eGamestateSound = 1u << 2,
+  eGamestateText = 1u << 3,
+  eGamestateIntro = 1u << 4
 };
 typedef enum gamestate_e gamestate_t;
 
@@ -298,10 +296,10 @@ game_draw(game_manager_t* gm)
   // -- Draw cursor
   {
     SDL_FRect cursor_draw_rect = {
-      .x = (f32)(gm->cursor.position.x - kCursorHotpixelX),
-      .y = (f32)(gm->cursor.position.y - kCursorHotpixelY),
-      .w = kCursorWidth,
-      .h = kCursorHeight};
+      .x = (f32)(gm->cursor.position.x - gm->config.cursor_hot_pixel.xy.x),
+      .y = (f32)(gm->cursor.position.y - gm->config.cursor_hot_pixel.xy.y),
+      .w = (f32)gm->config.cursor_size.wh.w,
+      .h = (f32)gm->config.cursor_size.wh.h};
 
     SDL_RenderTexture(gm->screen.renderer, gm->cursor.image[gm->cursor.state], NULL, &cursor_draw_rect);
   }
@@ -340,8 +338,6 @@ video_unload(game_manager_t* gm)
   plm_destroy(gm->video.player);
   memset(&gm->video, 0, sizeof(video_t));
 }
-
-
 
 static void
 video_play(game_manager_t* gm, plm_t* video)
@@ -964,13 +960,16 @@ static void
 intro_play(game_manager_t* gm)
 {
   plm_t* intro_video = video_load(gm, "data/videos/intro.mpg");
+
+  gm->gamestate = eGamestateIntro;
+
   video_play(gm, intro_video);
 }
 
 static void
-config_init(game_manager_t* gm)
+config_parse(game_manager_t* gm)
 {
-  sexp_t* config = script_load("data/config.sexp");
+  sexp_t* config = script_load(kConfigPath);
 
   sexp_t* s = config->list;
 
@@ -990,7 +989,7 @@ config_init(game_manager_t* gm)
       {
         if (s->list->next)
         {
-          gm->config.intro_skip = s->list->next->val == 't' ? true : false;
+          gm->config.intro_skip = *s->list->next->val == 't' ? true : false;
         }
         else
         {
@@ -1072,7 +1071,7 @@ config_init(game_manager_t* gm)
       {
         if (s->list->next)
         {
-          gm->config.font_color.r = atoi(s->list->next->val);
+          gm->config.font_color.r = (u8)atoi(s->list->next->val);
         }
         else
         {
@@ -1082,7 +1081,7 @@ config_init(game_manager_t* gm)
 
         if (s->list->next->next)
         {
-          gm->config.font_color.g = atoi(s->list->next->next->val);
+          gm->config.font_color.g = (u8)atoi(s->list->next->next->val);
         }
         else
         {
@@ -1092,7 +1091,7 @@ config_init(game_manager_t* gm)
 
         if (s->list->next->next->next)
         {
-          gm->config.font_color.b = atoi(s->list->next->next->next->val);
+          gm->config.font_color.b = (u8)atoi(s->list->next->next->next->val);
         }
         else
         {
@@ -1105,7 +1104,7 @@ config_init(game_manager_t* gm)
       {
         if (s->list->next)
         {
-          gm->config.retro_color_mode = s->list->next->val == 't' ? true : false;
+          gm->config.retro_color_mode = *s->list->next->val == 't' ? true : false;
         }
         else
         {
@@ -1124,7 +1123,7 @@ config_init(game_manager_t* gm)
 static void
 game_init(game_manager_t* gm)
 {
-  gm->script = script_load("data/script.sexp");
+  gm->script = script_load(kScriptPath);
   gm->scene_count = scenes_count(gm->script);
 
   scenes_alloc(gm);
@@ -1147,8 +1146,6 @@ game_init(game_manager_t* gm)
 
   gm->stack_size = 0;
   gm->stack_idx = -1;
-
-  gm->gamestate = eGamestateIntro;
 
   gm->debug = false;
 
@@ -1267,10 +1264,13 @@ main(void)
 
   g_gm->screen.surface = SDL_GetWindowSurface(g_gm->screen.window);
 
-  config_init(g_gm);
+  config_parse(g_gm);
   game_init(g_gm);
 
-  intro_play(g_gm);
+  if (!g_gm->config.intro_skip)
+  {
+    intro_play(g_gm);
+  }
 
   while (!g_gm->quit)
   {
