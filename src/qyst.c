@@ -244,7 +244,7 @@ audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
   i32 length = (i32)(sizeof(float) * samples->count * 2);
   if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, length))
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Error outputing audio data: %s", SDL_GetError());
+    log_error("SDL_PutAudioStreamData() error: %s", SDL_GetError());
   }
 }
 
@@ -436,7 +436,7 @@ gamestate_process(game_manager_t* gm)
             gm->gamestate = eGamestateSound;
             if (!SDL_LoadWAV(c.data.path, &gm->sound.spec, &gm->sound.data, &gm->sound.data_len))
             {
-              SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
+              log_error("SDL_LoadWAV() error: %s", SDL_GetError());
               game_stack_pop(gm);
               break;
             }
@@ -740,14 +740,14 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       SDL_Surface* background = SDL_LoadBMP(path);
       if (!background)
       {
-        log_fatal("SDL_LoadBMP couldn't load %s", path);
+        log_fatal("SDL_LoadBMP() error: %s", SDL_GetError());
         exit(EXIT_FAILURE);
       }
 
       scene->background = SDL_CreateTextureFromSurface(gm->screen.renderer, background);
       if (!scene->background)
       {
-        log_fatal("Can't create a texture from an existing surface: %s", SDL_GetError());
+        log_fatal("SDL_CreateTextureFromSurface() error: %s", SDL_GetError());
         exit(EXIT_FAILURE);
       }
 
@@ -1169,19 +1169,19 @@ game_init(game_manager_t* gm)
       SDL_Surface* cursor_bmp;
       if (!(cursor_bmp = SDL_LoadBMP(pairs[i].bmp_path)))
       {
-        fprintf(stderr, "Unable to load image %s! SDL_image error: %s\n", pairs[i].bmp_path, SDL_GetError());
+        log_fatal("SDL_LoadBMP() error: %s\n", SDL_GetError());
         exit(EXIT_FAILURE);
       }
 
       // -- Color key color
       if (!SDL_SetSurfaceColorKey(cursor_bmp, true, SDL_MapRGB(SDL_GetPixelFormatDetails(cursor_bmp->format), NULL, 0xff, 0x00, 0xff)))
       {
-        fprintf(stderr, "Unable to color key! SDL error: %s", SDL_GetError());
+        log_error("SDL_SetSurfaceColorKey() error: %s", SDL_GetError());
       }
 
       if (!(gm->cursor.image[pairs[i].state] = SDL_CreateTextureFromSurface(gm->screen.renderer, cursor_bmp)))
       {
-        log_fatal("Can't create a color cursor: %s", SDL_GetError());
+        log_fatal("SDL_CreateTextureFromSurface() error: %s", SDL_GetError());
         exit(EXIT_FAILURE);
       }
       SDL_DestroySurface(cursor_bmp);
@@ -1202,7 +1202,7 @@ main(void)
 
   if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO))
   {
-    SDL_LogError(SDL_LOG_CATEGORY_SYSTEM, "Can't initialize the SDL library: %s\n", SDL_GetError());
+    log_fatal("SDL_Init() error: %s\n", SDL_GetError());
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
@@ -1210,7 +1210,7 @@ main(void)
   g_gm->screen.window = SDL_CreateWindow(kWindowTitle, kScreenWidth, kScreenHeight, 0);
   if (!g_gm->screen.window)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Can't create a window with the specified dimensions and flags: %s\n", SDL_GetError());
+    log_fatal("SDL_CreateWindow() error: %s\n", SDL_GetError());
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
@@ -1218,7 +1218,7 @@ main(void)
   g_gm->screen.renderer = SDL_CreateRenderer(g_gm->screen.window, NULL);
   if (!g_gm->screen.renderer)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Can't create a 2D rendering context for a window: %s\n", SDL_GetError());
+    log_fatal("SDL_CreateRenderer() error: %s\n", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
@@ -1227,7 +1227,7 @@ main(void)
   g_gm->screen.texture = SDL_CreateTexture(g_gm->screen.renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_STREAMING, kScreenWidth, kScreenHeight);
   if (!g_gm->screen.texture)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_RENDER, "Can't create a 2D rendering context for a window: %s\n", SDL_GetError());
+    log_fatal("SDL_CreateTexture() error: %s\n", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
@@ -1236,7 +1236,7 @@ main(void)
   g_gm->audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL, NULL, NULL);
   if (!g_gm->audio_stream)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Couldn't create audio stream: %s", SDL_GetError());
+    log_fatal("SDL_OpenAudioDeviceStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
@@ -1246,20 +1246,20 @@ main(void)
   // They only serves to make the pixels square and clean when resizing the window
   if (!SDL_SetRenderVSync(g_gm->screen.renderer, SDL_RENDERER_VSYNC_ADAPTIVE))
   {
-    fprintf(stderr, "SDL_SetRenderVSync() failed: %s", SDL_GetError());
+    log_error("SDL_SetRenderVSync() error: %s", SDL_GetError());
   }
   if (!SDL_SetRenderLogicalPresentation(g_gm->screen.renderer, kScreenWidth, kScreenHeight, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE))
   {
-    fprintf(stderr, "SDL_SetRenderLogicalPresentation() failed: %s", SDL_GetError());
+    log_error("SDL_SetRenderLogicalPresentation() error: %s", SDL_GetError());
   }
   if (!SDL_SetDefaultTextureScaleMode(g_gm->screen.renderer, SDL_SCALEMODE_NEAREST))
   {
-    fprintf(stderr, "SDL_SetDefaultTextureScaleMode() failed: %s", SDL_GetError());
+    log_error("SDL_SetDefaultTextureScaleMode() error: %s", SDL_GetError());
   }
 
   if (!SDL_HideCursor())
   {
-    fprintf(stderr, "SDL_HideCursor() failed: %s", SDL_GetError());
+    log_error("SDL_HideCursor() error: %s", SDL_GetError());
   }
 
   g_gm->screen.surface = SDL_GetWindowSurface(g_gm->screen.window);
