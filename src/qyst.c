@@ -224,6 +224,7 @@ static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
 static plm_t* video_load(game_manager_t* gm, const char* path);
 static void video_play(game_manager_t* gm, plm_t* video);
 static void video_update(game_manager_t* gm);
+static void video_unload(game_manager_t* gm);
 
 static void
 video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
@@ -332,6 +333,15 @@ video_load(game_manager_t* gm, const char* path)
 
   return player;
 }
+
+static void
+video_unload(game_manager_t* gm)
+{
+  plm_destroy(gm->video.player);
+  memset(&gm->video, 0, sizeof(video_t));
+}
+
+
 
 static void
 video_play(game_manager_t* gm, plm_t* video)
@@ -462,6 +472,8 @@ gamestate_process(game_manager_t* gm)
       if (!gm->video.playing)
       {
         gm->gamestate = eGamestatePlay;
+
+        video_unload(gm);
 
         game_stack_pop(gm);
       }
