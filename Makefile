@@ -8,7 +8,7 @@ CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wformat=2 -Wformat-over
          -Wswitch-enum -Wcast-align=strict -O0 -ggdb3 -Isrc -I/usr/include/sfsexp \
 				 -I./external/pl_mpeg -I./external/log/src -std=c99
 
-LDFLAGS = -lSDL3 -lSDL3_mixer -lsexp
+LDFLAGS = -lSDL3 -lsexp
 
 TARGET = qyst
 SRC = src/qyst.c

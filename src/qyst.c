@@ -7,7 +7,6 @@
 #include <sexp.h>
 
 #include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
 
 #define PL_MPEG_IMPLEMENTATION
 #include "pl_mpeg.h"
@@ -116,7 +115,6 @@ struct scene_s
   SDL_Texture* background;
   hotspot_t* hotspot[8];
   i32 hotspot_count;
-  //MIX_Audio* music;
   char* music_path;
 };
 
