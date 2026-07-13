@@ -392,6 +392,11 @@ video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position)
   };
 
   SDL_SetAudioStreamFormat(gm->audio_stream, &spec, NULL);
+
+  if (cutscene && gm->music_playing)
+  {
+    SDL_ClearAudioStream(gm->music_stream);
+  }
 }
 
 static void
@@ -471,6 +476,7 @@ gamestate_process(game_manager_t* gm)
     case eGamestateIntro:
       if (!gm->video.playing)
       {
+        video_unload(gm);
         gm->gamestate = eGamestatePlay;
         switch_music(gm, NULL, gm->scene[gm->scene_current]->music_path);
       }
@@ -1013,7 +1019,7 @@ game_update(game_manager_t* gm)
     SDL_SetWindowTitle(gm->screen.window, buffer);
   }
 
-  if (gm->music_playing)
+  if (gm->music_playing && !gm->video.cutscene)
   {
     // Get allways at least a full copy of the music data queued
     if (SDL_GetAudioStreamQueued(gm->music_stream) < ((int) gm->music.data_len))
