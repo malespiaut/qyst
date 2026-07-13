@@ -36,10 +36,10 @@ typedef size_t usize;
 
 #define kStringLength 256
 
-bool g_quit = false;
+#define kAutoCenterValue (kScreenWidth*2)
+#define kAutoCenterPoint ((SDL_Point){kAutoCenterValue,0})
 
-#define AUTOCENTER ((SDL_Point){kScreenWidth*2,0})
-#define IS_AUTOCENTER(point) (point.x == kScreenWidth*2)
+bool g_quit = false;
 
 enum gamestate_e
 {
@@ -223,6 +223,7 @@ static void hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs);
 static void hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data);
 static void hotspots_draw(game_manager_t* gm);
 static void intro_play(game_manager_t* gm);
+static bool is_autocenter(SDL_Point point);
 static bool is_next_element_list(sexp_t* s);
 static bool is_next_element_value(sexp_t* s);
 static bool is_over_hotspot(hotspot_t* hs, i32 x, i32 y);
@@ -239,6 +240,12 @@ static plm_t* video_load(game_manager_t* gm, const char* path);
 static void video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position);
 static void video_update(game_manager_t* gm);
 static void video_unload(game_manager_t* gm);
+
+static bool
+is_autocenter(SDL_Point point)
+{
+  return point.x == kAutoCenterValue;
+}
 
 static void
 video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
@@ -353,7 +360,7 @@ video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position)
   i32 video_width = plm_get_width(video);
   i32 video_height = plm_get_height(video);
 
-  if (IS_AUTOCENTER(position))
+  if (is_autocenter(position))
   {
     position.x = (kScreenWidth - video_width)/2;
     position.y = (kScreenHeight - video_height)/2;
@@ -712,7 +719,7 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
         }
         else
         {
-          video_conf.position = AUTOCENTER;
+          video_conf.position = kAutoCenterPoint;
         }
         video_conf.path = s->list->next->next->next->val;
 
@@ -1044,7 +1051,7 @@ intro_play(game_manager_t* gm)
 
   gm->gamestate = eGamestateIntro;
 
-  video_play(gm, intro_video, true, AUTOCENTER);
+  video_play(gm, intro_video, true, kAutoCenterPoint);
 }
 
 static void
