@@ -35,6 +35,7 @@ typedef size_t usize;
 #define kConfigPath "data/config.sexp"
 
 #define kStringLength 256
+#define kMaxVariables 256
 
 #define kAutoCenterValue (kScreenWidth*2)
 #define kAutoCenterPoint ((SDL_Point){kAutoCenterValue,0})
@@ -58,9 +59,17 @@ enum celltype_e
   eStacktypeTarget,
   eStacktypeVideo,
   eStacktypeSound,
+  eStacktypeSet,
   eStacktypeText
 };
 typedef enum celltype_e celltype_t;
+
+typedef struct variable_s variable_t;
+struct variable_s
+{
+  char* name;
+  bool value;
+};
 
 typedef struct video_conf_s video_conf_t;
 struct video_conf_s
@@ -77,6 +86,7 @@ union celldata_u
   char* path;
   char* text;
   video_conf_t video_conf;
+  variable_t set;
 };
 
 typedef struct cell_s cell_t;
@@ -114,6 +124,7 @@ typedef struct hotspot_s hotspot_t;
 struct hotspot_s
 {
   char* label;
+  char* condition;
   SDL_Rect bounds;
   cell_t stack[32];
   isize stack_size;
@@ -198,6 +209,9 @@ struct game_manager_s
   bool music_playing;
   video_t video;
 
+  usize variable_count;
+  variable_t variables[kMaxVariables];
+
   cell_t (*stack)[32];
   isize stack_size;
   isize stack_idx;
@@ -212,6 +226,7 @@ game_manager_t* g_gm = NULL;
 
 static void audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user);
 static void click_process(game_manager_t* gm, i32 x, i32 y);
+static bool condition_check(game_manager_t* gm, char* condition);
 static void events_process(game_manager_t* gm);
 static void game_draw(game_manager_t* gm);
 static void game_init(game_manager_t* gm);
@@ -235,6 +250,9 @@ static usize scenes_count(sexp_t* s);
 static void scenes_alloc(game_manager_t* gm);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
+static bool variable_check(game_manager_t* gm, char *name);
+static void variable_draw(game_manager_t* gm);
+static void variable_set(game_manager_t* gm, variable_t set);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
 static plm_t* video_load(game_manager_t* gm, const char* path);
 static void video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position);
@@ -271,6 +289,77 @@ audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
   }
 }
 
+static bool
+variable_check(game_manager_t* gm, char *name)
+{
+  for (usize i = 0; i < gm->variable_count; ++i)
+  {
+    if (!strcmp(name, gm->variables[i].name))
+    {
+      return gm->variables[i].value;
+    }
+  }
+  return false;
+}
+
+static bool
+condition_check(game_manager_t* gm, char* condition)
+{
+  if (!condition || !condition[0])
+  {
+    return true;
+  }
+  if (condition[0] == '!')
+  {
+    condition++;
+    return !variable_check(gm, condition);
+  }
+  return variable_check(gm, condition);
+}
+
+static void
+variable_set(game_manager_t* gm, variable_t set)
+{
+  for (usize i = 0; i < gm->variable_count; ++i)
+  {
+    if (!strcmp(set.name, gm->variables[i].name))
+    {
+      gm->variables[i].value = set.value;
+      return;
+    }
+  }
+  if (gm->variable_count >= kMaxVariables)
+  {
+    log_error("Too many variables set (max=%d).", kMaxVariables);
+  }
+  else
+  {
+    gm->variables[gm->variable_count++] = set;
+  }
+}
+
+static void
+variable_draw(game_manager_t* gm)
+{
+  for (usize i = 0; i < gm->variable_count ; ++i)
+  {
+    f32 x = (f32)((i * ((SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE+2)) / kScreenHeight) * 100);
+    f32 y = (f32)((i * (SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE+2)) % kScreenHeight);
+    if (gm->variables[i].value)
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 0, 255, 0, 255);
+    }
+    else
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    }
+    SDL_RenderDebugTextFormat(
+        gm->screen.renderer, x, y,
+        "%s=%s", gm->variables[i].name, gm->variables[i].value ? "true" : "false");
+  }
+  SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255);
+}
+
 static void
 hotspots_draw(game_manager_t* gm)
 {
@@ -278,7 +367,14 @@ hotspots_draw(game_manager_t* gm)
   {
     hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
     SDL_Rect r = hs->bounds;
-    SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    if (condition_check(gm, hs->condition))
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 0, 255, 0, 255);
+    }
+    else
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    }
     SDL_RenderRect(gm->screen.renderer, &(SDL_FRect){.x = (f32)r.x, .y = (f32)r.y, .w = (f32)r.w, .h = (f32)r.h});
   }
 
@@ -305,6 +401,7 @@ game_draw(game_manager_t* gm)
     if (gm->debug)
     {
       hotspots_draw(gm);
+      variable_draw(gm);
     }
   }
 
@@ -525,6 +622,10 @@ gamestate_process(game_manager_t* gm)
             gm->scene_current = c.data.target;
             game_stack_pop(gm);
             break;
+          case eStacktypeSet:
+            variable_set(gm, c.data.set);
+            game_stack_pop(gm);
+            break;
           case eStacktypeNULL:
             break;
           default:
@@ -580,7 +681,7 @@ click_process(game_manager_t* gm, i32 x, i32 y)
   for (i32 i = 0; i < gm->scene[gm->scene_current]->hotspot_count; ++i)
   {
     hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
-    if (is_over_hotspot(hs, x, y))
+    if (is_over_hotspot(hs, x, y) && condition_check(gm, hs->condition))
     {
       gm->stack = &hs->stack;
       gm->stack_size = hs->stack_size;
@@ -740,6 +841,14 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
       {
         hotspot_stack_push(hs, eStacktypeText, (celldata_t){.text = s->list->next->val});
       }
+
+      else if (!strncmp(type, "set", str_length))
+      {
+        variable_t set = {
+          .name = s->list->next->val,
+          .value = s->list->next->next->val[0] == 't'};
+        hotspot_stack_push(hs, eStacktypeSet, (celldata_t){.set = set});
+      }
     }
 
     s = s->next;
@@ -855,14 +964,23 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       }
       strncpy(scene->hotspot[scene->hotspot_count - 1]->label, elem->list->next->val, elem->list->next->val_used);
 
+      // -- Hotspot condition
+
+      if (!(scene->hotspot[scene->hotspot_count - 1]->condition = calloc(elem->list->next->next->val_used + 1, 1)))
+      {
+        perror("ERROR: scene_init(): Couldn't allocate memory!");
+        exit(EXIT_FAILURE);
+      }
+      strncpy(scene->hotspot[scene->hotspot_count - 1]->condition, elem->list->next->next->val, elem->list->next->next->val_used);
+
       // -- Hotspot boundaries
-      sexp_t* bounds = elem->list->next->next->list;
+      sexp_t* bounds = elem->list->next->next->next->list;
       scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(bounds->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(bounds->next->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(bounds->next->next->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(bounds->next->next->next->val);
 
-      sexp_t* hs_stack = elem->list->next->next->next->list;
+      sexp_t* hs_stack = elem->list->next->next->next->next->list;
 
       hotspot_parse(gm, hs_stack, scene->hotspot[scene->hotspot_count - 1]);
     }
