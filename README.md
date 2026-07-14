@@ -15,7 +15,6 @@ a point-and-click adventure game if you are creative enough!
 ## Prerequisites
 
 - [SDL3](https://github.com/libsdl-org/SDL)
-- [SDL3_mixer](https://github.com/libsdl-org/SDL_mixer)
 - [sfsexp](https://github.com/mjsottile/sfsexp) (S-Expression library)
 
 ## Included libraries
