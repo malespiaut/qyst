@@ -36,6 +36,9 @@ typedef size_t usize;
 
 #define kStringLength 256
 
+#define kAutoCenterValue (kScreenWidth*2)
+#define kAutoCenterPoint ((SDL_Point){kAutoCenterValue,0})
+
 bool g_quit = false;
 
 enum gamestate_e
@@ -59,12 +62,21 @@ enum celltype_e
 };
 typedef enum celltype_e celltype_t;
 
+typedef struct video_conf_s video_conf_t;
+struct video_conf_s
+{
+  char* path;
+  bool cutscene;
+  SDL_Point position;
+};
+
 typedef union celldata_u celldata_t;
 union celldata_u
 {
   i32 target;
   char* path;
   char* text;
+  video_conf_t video_conf;
 };
 
 typedef struct cell_s cell_t;
@@ -130,9 +142,11 @@ typedef struct video_s video_t;
 struct video_s
 {
   bool playing;
+  bool cutscene;
   plm_t* player;
   SDL_Texture* texture;
-  SDL_FRect rectangle;
+  SDL_FRect src_rect;
+  SDL_FRect dest_rect;
 };
 
 enum cursorstate_e
@@ -209,6 +223,7 @@ static void hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs);
 static void hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data);
 static void hotspots_draw(game_manager_t* gm);
 static void intro_play(game_manager_t* gm);
+static bool is_autocenter(SDL_Point point);
 static bool is_next_element_list(sexp_t* s);
 static bool is_next_element_value(sexp_t* s);
 static bool is_over_hotspot(hotspot_t* hs, i32 x, i32 y);
@@ -222,9 +237,15 @@ static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
 static plm_t* video_load(game_manager_t* gm, const char* path);
-static void video_play(game_manager_t* gm, plm_t* video);
+static void video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position);
 static void video_update(game_manager_t* gm);
 static void video_unload(game_manager_t* gm);
+
+static bool
+is_autocenter(SDL_Point point)
+{
+  return point.x == kAutoCenterValue;
+}
 
 static void
 video_decode_callback(plm_t* player, plm_frame_t* frame, void* user)
@@ -269,23 +290,15 @@ game_draw(game_manager_t* gm)
 {
   SDL_RenderClear(gm->screen.renderer);
 
-  // -- Draw scene background
-  SDL_RenderTexture(gm->screen.renderer, gm->scene[gm->scene_current]->background, NULL, NULL);
+  if (!(gm->video.playing && gm->video.cutscene))
+  {
+    // -- Draw scene background
+    SDL_RenderTexture(gm->screen.renderer, gm->scene[gm->scene_current]->background, NULL, NULL);
+  }
 
   if (gm->video.playing)
   {
-    i32 video_width = plm_get_width(gm->video.player);
-    i32 video_height = plm_get_height(gm->video.player);
-
-    if ((video_width < kScreenWidth) && (video_height < kScreenHeight))
-    {
-
-      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &(SDL_FRect){.x = (f32)((kScreenWidth - video_width) / 2), .y = (f32)((kScreenHeight - video_height) / 2), .w = (f32)video_width, .h = (f32)video_height});
-    }
-    else
-    {
-      SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.rectangle, &gm->video.rectangle);
-    }
+    SDL_RenderTexture(gm->screen.renderer, gm->video.texture, &gm->video.src_rect, &gm->video.dest_rect);
   }
   else
   {
@@ -342,19 +355,33 @@ video_unload(game_manager_t* gm)
 }
 
 static void
-video_play(game_manager_t* gm, plm_t* video)
+video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position)
 {
+  i32 video_width = plm_get_width(video);
+  i32 video_height = plm_get_height(video);
+
+  if (is_autocenter(position))
+  {
+    position.x = (kScreenWidth - video_width)/2;
+    position.y = (kScreenHeight - video_height)/2;
+  }
+
   gm->video.playing = true;
+  gm->video.cutscene = cutscene;
   gm->video.player = video;
   gm->video.texture = SDL_CreateTexture(
     gm->screen.renderer,
     SDL_PIXELFORMAT_IYUV,
     SDL_TEXTUREACCESS_STREAMING,
-    plm_get_width(video),
-    plm_get_height(video));
+    video_width,
+    video_height);
 
-  gm->video.rectangle.w = (f32)plm_get_width(video);
-  gm->video.rectangle.h = (f32)plm_get_height(video);
+  gm->video.src_rect.w = (f32)video_width;
+  gm->video.src_rect.h = (f32)video_height;
+
+  gm->video.dest_rect = gm->video.src_rect;
+  gm->video.dest_rect.x = (f32)position.x;
+  gm->video.dest_rect.y = (f32)position.y;
 
   gm->last_time = (double)SDL_GetTicks() / 1000.0;
 
@@ -365,6 +392,11 @@ video_play(game_manager_t* gm, plm_t* video)
   };
 
   SDL_SetAudioStreamFormat(gm->audio_stream, &spec, NULL);
+
+  if (cutscene && gm->music_playing)
+  {
+    SDL_ClearAudioStream(gm->music_stream);
+  }
 }
 
 static void
@@ -444,6 +476,7 @@ gamestate_process(game_manager_t* gm)
     case eGamestateIntro:
       if (!gm->video.playing)
       {
+        video_unload(gm);
         gm->gamestate = eGamestatePlay;
         switch_music(gm, NULL, gm->scene[gm->scene_current]->music_path);
       }
@@ -461,8 +494,8 @@ gamestate_process(game_manager_t* gm)
         {
           case eStacktypeVideo:
             gm->gamestate = eGamestateVideo;
-            plm_t* video = video_load(gm, c.data.path);
-            video_play(gm, video);
+            plm_t* video = video_load(gm, c.data.video_conf.path);
+            video_play(gm, video, c.data.video_conf.cutscene, c.data.video_conf.position);
             break;
           case eStacktypeSound:
             gm->gamestate = eGamestateSound;
@@ -680,7 +713,22 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
 
       else if (!strncmp(type, "video", str_length))
       {
-        hotspot_stack_push(hs, eStacktypeVideo, (celldata_t){.path = s->list->next->val});
+        video_conf_t video_conf = {0};
+        //TODO: check?
+        video_conf.cutscene = s->list->next->val[0] == 't';
+        sexp_t* position = s->list->next->next->list;
+        if (position)
+        {
+          video_conf.position.x = atoi(position->val);
+          video_conf.position.y = atoi(position->next->val);
+        }
+        else
+        {
+          video_conf.position = kAutoCenterPoint;
+        }
+        video_conf.path = s->list->next->next->next->val;
+
+        hotspot_stack_push(hs, eStacktypeVideo, (celldata_t){.video_conf = video_conf});
       }
 
       else if (!strncmp(type, "sound", str_length))
@@ -970,7 +1018,7 @@ game_update(game_manager_t* gm)
     SDL_SetWindowTitle(gm->screen.window, buffer);
   }
 
-  if (gm->music_playing)
+  if (gm->music_playing && !gm->video.cutscene)
   {
     // Get allways at least a full copy of the music data queued
     if (SDL_GetAudioStreamQueued(gm->music_stream) < ((int)gm->music.data_len))
@@ -1008,7 +1056,7 @@ intro_play(game_manager_t* gm)
 
   gm->gamestate = eGamestateIntro;
 
-  video_play(gm, intro_video);
+  video_play(gm, intro_video, true, kAutoCenterPoint);
 }
 
 static void

@@ -6,13 +6,14 @@
     (hotspot "To scene 2!" (128 72 100 100)
       (
         (sound "data/sounds/click.wav")
-        (video "data/videos/01.mpg")
+        (video t () "data/videos/01.mpg")
         (target "scene-2")
       )
     )
     (hotspot "Click!" (440 40 100 100)
       (
         (sound "data/sounds/click.wav")
+        (target "scene-2")
       )
     )
   )
@@ -20,7 +21,7 @@
   ;; Scene 2
   (scene-2
     (background "data/backgrounds/03.bmp")
-    (music "data/musics/myst.wav")
+    (music "data/musics/myst2.wav")
     (hotspot "To scene 7!" (128 144 320 216)
       (
         (sound "data/sounds/click.wav")
