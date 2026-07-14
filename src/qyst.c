@@ -343,7 +343,14 @@ hotspots_draw(game_manager_t* gm)
   {
     hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
     SDL_Rect r = hs->bounds;
-    SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    if (condition_check(gm, hs->condition))
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 0, 255, 0, 255);
+    }
+    else
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    }
     SDL_RenderRect(gm->screen.renderer, &(SDL_FRect){.x = (f32)r.x, .y = (f32)r.y, .w = (f32)r.w, .h = (f32)r.h});
   }
 
