@@ -36,8 +36,8 @@ typedef size_t usize;
 
 #define kStringLength 256
 
-#define kAutoCenterValue (kScreenWidth*2)
-#define kAutoCenterPoint ((SDL_Point){kAutoCenterValue,0})
+#define kAutoCenterValue (kScreenWidth * 2)
+#define kAutoCenterPoint ((SDL_Point){kAutoCenterValue, 0})
 
 bool g_quit = false;
 
@@ -362,8 +362,8 @@ video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position)
 
   if (is_autocenter(position))
   {
-    position.x = (kScreenWidth - video_width)/2;
-    position.y = (kScreenHeight - video_height)/2;
+    position.x = (kScreenWidth - video_width) / 2;
+    position.y = (kScreenHeight - video_height) / 2;
   }
 
   gm->video.playing = true;
@@ -714,7 +714,7 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
       else if (!strncmp(type, "video", str_length))
       {
         video_conf_t video_conf = {0};
-        //TODO: check?
+        // TODO: check?
         video_conf.cutscene = s->list->next->val[0] == 't';
         sexp_t* position = s->list->next->next->list;
         if (position)
