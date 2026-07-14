@@ -124,6 +124,7 @@ typedef struct hotspot_s hotspot_t;
 struct hotspot_s
 {
   char* label;
+  char* condition;
   SDL_Rect bounds;
   cell_t stack[32];
   isize stack_size;
@@ -297,6 +298,21 @@ variable_check(game_manager_t* gm, char *name)
     }
   }
   return false;
+}
+
+static bool
+condition_check(game_manager_t* gm, char* condition)
+{
+  if (!condition || !condition[0])
+  {
+    return true;
+  }
+  if (condition[0] == '!')
+  {
+    condition++;
+    return !variable_check(gm, condition);
+  }
+  return variable_check(gm, condition);
 }
 
 static void
@@ -576,6 +592,7 @@ gamestate_process(game_manager_t* gm)
             break;
           case eStacktypeSet:
             variable_set(gm, c.data.set);
+            game_stack_pop(gm);
             break;
           case eStacktypeNULL:
             break;
@@ -632,7 +649,7 @@ click_process(game_manager_t* gm, i32 x, i32 y)
   for (i32 i = 0; i < gm->scene[gm->scene_current]->hotspot_count; ++i)
   {
     hotspot_t* hs = gm->scene[gm->scene_current]->hotspot[i];
-    if (is_over_hotspot(hs, x, y))
+    if (is_over_hotspot(hs, x, y) && condition_check(gm, hs->condition))
     {
       gm->stack = &hs->stack;
       gm->stack_size = hs->stack_size;
@@ -915,14 +932,23 @@ scene_init(game_manager_t* gm, sexp_t* s, scene_t* scene)
       }
       strncpy(scene->hotspot[scene->hotspot_count - 1]->label, elem->list->next->val, elem->list->next->val_used);
 
+      // -- Hotspot condition
+
+      if (!(scene->hotspot[scene->hotspot_count - 1]->condition = calloc(elem->list->next->next->val_used + 1, 1)))
+      {
+        perror("ERROR: scene_init(): Couldn't allocate memory!");
+        exit(EXIT_FAILURE);
+      }
+      strncpy(scene->hotspot[scene->hotspot_count - 1]->condition, elem->list->next->next->val, elem->list->next->next->val_used);
+
       // -- Hotspot boundaries
-      sexp_t* bounds = elem->list->next->next->list;
+      sexp_t* bounds = elem->list->next->next->next->list;
       scene->hotspot[scene->hotspot_count - 1]->bounds.x = atoi(bounds->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.y = atoi(bounds->next->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.w = atoi(bounds->next->next->val);
       scene->hotspot[scene->hotspot_count - 1]->bounds.h = atoi(bounds->next->next->next->val);
 
-      sexp_t* hs_stack = elem->list->next->next->next->list;
+      sexp_t* hs_stack = elem->list->next->next->next->next->list;
 
       hotspot_parse(gm, hs_stack, scene->hotspot[scene->hotspot_count - 1]);
     }
