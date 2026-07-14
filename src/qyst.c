@@ -426,7 +426,7 @@ switch_music(game_manager_t* gm, char* old_path, char* path)
 
     if (!SDL_LoadWAV(path, &gm->music.spec, &gm->music.data, &gm->music.data_len))
     {
-      SDL_Log("Couldn't load .wav file: %s", SDL_GetError());
+      log_fatal("Couldn't load .wav file: %s", SDL_GetError());
       gm->music_playing = false;
       return;
     }
@@ -1281,7 +1281,7 @@ main(void)
   g_gm->audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
   if (g_gm->audio_device == 0)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Couldn't open audio device: %s", SDL_GetError());
+    log_fatal("SDL_OpenAudioDevice() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
@@ -1297,7 +1297,7 @@ main(void)
   }
   else if (!SDL_BindAudioStream(g_gm->audio_device, g_gm->audio_stream))
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Failed to bind audio stream to device: %s", SDL_GetError());
+    log_fatal("SDL_BindAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
@@ -1306,14 +1306,14 @@ main(void)
   g_gm->music_stream = SDL_CreateAudioStream(NULL, NULL);
   if (!g_gm->music_stream)
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Couldn't create audio (music) stream: %s", SDL_GetError());
+    log_fatal("SDL_CreateAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
   else if (!SDL_BindAudioStream(g_gm->audio_device, g_gm->music_stream))
   {
-    SDL_LogError(SDL_LOG_CATEGORY_AUDIO, "Failed to bind music stream to device: %s", SDL_GetError());
+    log_fatal("SDL_BindAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
