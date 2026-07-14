@@ -177,26 +177,43 @@ struct config_s
   bool retro_color_mode;
 };
 
+typedef struct audio_manager_s audio_manager_t;
+struct audio_manager_s
+{
+  SDL_AudioDeviceID device;
+  SDL_AudioStream* stream;
+};
+
+typedef struct music_s music_t;
+struct music_s
+{
+  bool playing;
+  audio_t audio;
+  SDL_AudioStream* stream;
+};
+
 typedef struct game_manager_s game_manager_t;
 struct game_manager_s
 {
   config_t config;
+
   screen_manager_t screen;
-  SDL_AudioDeviceID audio_device;
-  SDL_AudioStream* audio_stream;
-  SDL_AudioStream* music_stream;
+  audio_manager_t audio;
+
+  bool debug;
   bool quit;
+
   double last_time;
-  usize scene_count;
-  i32 scene_current;
 
   cursor_t cursor;
 
+  usize scene_count;
+  i32 scene_current;
+
   scene_t** scene;
-  audio_t sound;
-  audio_t music;
-  bool music_playing;
   video_t video;
+  music_t music;
+  audio_t sound;
 
   cell_t (*stack)[32];
   isize stack_size;
@@ -204,7 +221,6 @@ struct game_manager_s
 
   gamestate_t gamestate;
 
-  bool debug;
   sexp_t* script;
 };
 
@@ -265,7 +281,7 @@ audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
   game_manager_t* gm = (game_manager_t*)user;
 
   i32 length = (i32)(sizeof(float) * samples->count * 2);
-  if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, length))
+  if (!SDL_PutAudioStreamData(gm->audio.stream, samples->interleaved, length))
   {
     log_error("SDL_PutAudioStreamData() error: %s", SDL_GetError());
   }
@@ -391,11 +407,11 @@ video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position)
     .freq = plm_get_samplerate(video),
   };
 
-  SDL_SetAudioStreamFormat(gm->audio_stream, &spec, NULL);
+  SDL_SetAudioStreamFormat(gm->audio.stream, &spec, NULL);
 
-  if (cutscene && gm->music_playing)
+  if (cutscene && gm->music.playing)
   {
-    SDL_ClearAudioStream(gm->music_stream);
+    SDL_ClearAudioStream(gm->music.stream);
   }
 }
 
@@ -443,28 +459,28 @@ switch_music(game_manager_t* gm, char* old_path, char* path)
 {
   if (!path)
   {
-    SDL_ClearAudioStream(gm->music_stream);
-    gm->music_playing = false;
+    SDL_ClearAudioStream(gm->music.stream);
+    gm->music.playing = false;
   }
   else if (!old_path || strcmp(old_path, path) != 0)
   {
-    SDL_ClearAudioStream(gm->music_stream);
+    SDL_ClearAudioStream(gm->music.stream);
 
-    if (gm->music.data)
+    if (gm->music.audio.data)
     {
-      SDL_free(gm->music.data);
-      gm->music = (audio_t){0};
+      SDL_free(gm->music.audio.data);
+      gm->music.audio = (audio_t){0};
     }
 
-    if (!SDL_LoadWAV(path, &gm->music.spec, &gm->music.data, &gm->music.data_len))
+    if (!SDL_LoadWAV(path, &gm->music.audio.spec, &gm->music.audio.data, &gm->music.audio.data_len))
     {
       log_fatal("Couldn't load .wav file: %s", SDL_GetError());
-      gm->music_playing = false;
+      gm->music.playing = false;
       return;
     }
 
-    SDL_SetAudioStreamFormat(gm->music_stream, &gm->music.spec, NULL);
-    gm->music_playing = true;
+    SDL_SetAudioStreamFormat(gm->music.stream, &gm->music.audio.spec, NULL);
+    gm->music.playing = true;
   }
 }
 
@@ -506,11 +522,11 @@ gamestate_process(game_manager_t* gm)
               break;
             }
 
-            SDL_SetAudioStreamFormat(gm->audio_stream, &gm->sound.spec, NULL);
-            SDL_ResumeAudioStreamDevice(gm->audio_stream);
+            SDL_SetAudioStreamFormat(gm->audio.stream, &gm->sound.spec, NULL);
+            SDL_ResumeAudioStreamDevice(gm->audio.stream);
 
-            SDL_PutAudioStreamData(gm->audio_stream, gm->sound.data, (i32)gm->sound.data_len);
-            SDL_FlushAudioStream(gm->audio_stream);
+            SDL_PutAudioStreamData(gm->audio.stream, gm->sound.data, (i32)gm->sound.data_len);
+            SDL_FlushAudioStream(gm->audio.stream);
 
             SDL_free(gm->sound.data); // TODO: maybe store sound data in memory a bit longer so it can be reused
             gm->sound = (audio_t){0};
@@ -544,9 +560,9 @@ gamestate_process(game_manager_t* gm)
       }
       break;
     case eGamestateSound:
-      if (SDL_GetAudioStreamAvailable(gm->audio_stream) <= 0)
+      if (SDL_GetAudioStreamAvailable(gm->audio.stream) <= 0)
       {
-        // SDL_PauseAudioStreamDevice(gm->audio_stream);
+        // SDL_PauseAudioStreamDevice(gm->audio.stream);
         game_stack_pop(gm);
       }
       break;
@@ -1018,12 +1034,12 @@ game_update(game_manager_t* gm)
     SDL_SetWindowTitle(gm->screen.window, buffer);
   }
 
-  if (gm->music_playing && !gm->video.cutscene)
+  if (gm->music.playing && !gm->video.cutscene)
   {
     // Get allways at least a full copy of the music data queued
-    if (SDL_GetAudioStreamQueued(gm->music_stream) < ((int)gm->music.data_len))
+    if (SDL_GetAudioStreamQueued(gm->music.stream) < ((int)gm->music.audio.data_len))
     {
-      SDL_PutAudioStreamData(gm->music_stream, gm->music.data, (int)gm->music.data_len);
+      SDL_PutAudioStreamData(gm->music.stream, gm->music.audio.data, (int)gm->music.audio.data_len);
     }
   }
 
@@ -1326,8 +1342,8 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
-  g_gm->audio_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
-  if (g_gm->audio_device == 0)
+  g_gm->audio.device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, NULL);
+  if (g_gm->audio.device == 0)
   {
     log_fatal("SDL_OpenAudioDevice() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
@@ -1335,15 +1351,15 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
-  g_gm->audio_stream = SDL_CreateAudioStream(NULL, NULL);
-  if (!g_gm->audio_stream)
+  g_gm->audio.stream = SDL_CreateAudioStream(NULL, NULL);
+  if (!g_gm->audio.stream)
   {
     log_fatal("SDL_OpenAudioDeviceStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
-  else if (!SDL_BindAudioStream(g_gm->audio_device, g_gm->audio_stream))
+  else if (!SDL_BindAudioStream(g_gm->audio.device, g_gm->audio.stream))
   {
     log_fatal("SDL_BindAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
@@ -1351,15 +1367,15 @@ main(void)
     return SDL_APP_FAILURE;
   }
 
-  g_gm->music_stream = SDL_CreateAudioStream(NULL, NULL);
-  if (!g_gm->music_stream)
+  g_gm->music.stream = SDL_CreateAudioStream(NULL, NULL);
+  if (!g_gm->music.stream)
   {
     log_fatal("SDL_CreateAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
-  else if (!SDL_BindAudioStream(g_gm->audio_device, g_gm->music_stream))
+  else if (!SDL_BindAudioStream(g_gm->audio.device, g_gm->music.stream))
   {
     log_fatal("SDL_BindAudioStream() error: %s", SDL_GetError());
     SDL_DestroyWindow(g_gm->screen.window);
@@ -1408,10 +1424,10 @@ main(void)
 exit:
   script_unload(g_gm->script);
 
-  SDL_free(g_gm->music.data);
-  SDL_DestroyAudioStream(g_gm->audio_stream);
-  SDL_DestroyAudioStream(g_gm->music_stream);
-  SDL_CloseAudioDevice(g_gm->audio_device);
+  SDL_free(g_gm->music.audio.data);
+  SDL_DestroyAudioStream(g_gm->audio.stream);
+  SDL_DestroyAudioStream(g_gm->music.stream);
+  SDL_CloseAudioDevice(g_gm->audio.device);
   SDL_DestroyRenderer(g_gm->screen.renderer);
   SDL_DestroyWindow(g_gm->screen.window);
   SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_AUDIO);
