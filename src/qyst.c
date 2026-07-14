@@ -226,6 +226,7 @@ game_manager_t* g_gm = NULL;
 
 static void audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user);
 static void click_process(game_manager_t* gm, i32 x, i32 y);
+static bool condition_check(game_manager_t* gm, char* condition);
 static void events_process(game_manager_t* gm);
 static void game_draw(game_manager_t* gm);
 static void game_init(game_manager_t* gm);
@@ -250,6 +251,7 @@ static void scenes_alloc(game_manager_t* gm);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
 static bool variable_check(game_manager_t* gm, char *name);
+static void variable_draw(game_manager_t* gm);
 static void variable_set(game_manager_t* gm, variable_t set);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
 static plm_t* video_load(game_manager_t* gm, const char* path);
@@ -337,6 +339,28 @@ variable_set(game_manager_t* gm, variable_t set)
 }
 
 static void
+variable_draw(game_manager_t* gm)
+{
+  for (usize i = 0; i < gm->variable_count ; ++i)
+  {
+    f32 x = (f32)((i * ((SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE+2)) / kScreenHeight) * 100);
+    f32 y = (f32)((i * (SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE+2)) % kScreenHeight);
+    if (gm->variables[i].value)
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 0, 255, 0, 255);
+    }
+    else
+    {
+      SDL_SetRenderDrawColor(gm->screen.renderer, 255, 0, 0, 255);
+    }
+    SDL_RenderDebugTextFormat(
+        gm->screen.renderer, x, y,
+        "%s=%s", gm->variables[i].name, gm->variables[i].value ? "true" : "false");
+  }
+  SDL_SetRenderDrawColor(gm->screen.renderer, 0, 0, 0, 255);
+}
+
+static void
 hotspots_draw(game_manager_t* gm)
 {
   for (i32 i = 0; i < gm->scene[gm->scene_current]->hotspot_count; ++i)
@@ -377,6 +401,7 @@ game_draw(game_manager_t* gm)
     if (gm->debug)
     {
       hotspots_draw(gm);
+      variable_draw(gm);
     }
   }
 
