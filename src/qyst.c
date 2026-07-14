@@ -486,9 +486,8 @@ gamestate_process(game_manager_t* gm)
             game_stack_pop(gm);
             break;
           case eStacktypeTarget:
-            ;
             scene_t* current_scene = gm->scene[gm->scene_current];
-            scene_t* target_scene  = gm->scene[c.data.target];
+            scene_t* target_scene = gm->scene[c.data.target];
             switch_music(gm, current_scene->music_path, target_scene->music_path);
             gm->scene_current = c.data.target;
             game_stack_pop(gm);
@@ -974,9 +973,9 @@ game_update(game_manager_t* gm)
   if (gm->music_playing)
   {
     // Get allways at least a full copy of the music data queued
-    if (SDL_GetAudioStreamQueued(gm->music_stream) < ((int) gm->music.data_len))
+    if (SDL_GetAudioStreamQueued(gm->music_stream) < ((int)gm->music.data_len))
     {
-      SDL_PutAudioStreamData(gm->music_stream, gm->music.data, (int) gm->music.data_len);
+      SDL_PutAudioStreamData(gm->music_stream, gm->music.data, (int)gm->music.data_len);
     }
   }
 
@@ -1319,7 +1318,6 @@ main(void)
     SDL_Quit();
     return SDL_APP_FAILURE;
   }
-
 
   // These calls are optional
   // They only serves to make the pixels square and clean when resizing the window
