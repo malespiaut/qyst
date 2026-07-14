@@ -35,6 +35,7 @@ typedef size_t usize;
 #define kConfigPath "data/config.sexp"
 
 #define kStringLength 256
+#define kMaxVariables 256
 
 #define kAutoCenterValue (kScreenWidth*2)
 #define kAutoCenterPoint ((SDL_Point){kAutoCenterValue,0})
@@ -58,9 +59,17 @@ enum celltype_e
   eStacktypeTarget,
   eStacktypeVideo,
   eStacktypeSound,
+  eStacktypeSet,
   eStacktypeText
 };
 typedef enum celltype_e celltype_t;
+
+typedef struct variable_s variable_t;
+struct variable_s
+{
+  char* name;
+  bool value;
+};
 
 typedef struct video_conf_s video_conf_t;
 struct video_conf_s
@@ -77,6 +86,7 @@ union celldata_u
   char* path;
   char* text;
   video_conf_t video_conf;
+  variable_t set;
 };
 
 typedef struct cell_s cell_t;
@@ -198,6 +208,9 @@ struct game_manager_s
   bool music_playing;
   video_t video;
 
+  usize variable_count;
+  variable_t variables[kMaxVariables];
+
   cell_t (*stack)[32];
   isize stack_size;
   isize stack_idx;
@@ -235,6 +248,8 @@ static usize scenes_count(sexp_t* s);
 static void scenes_alloc(game_manager_t* gm);
 static sexp_t* script_load(char* path);
 static void script_unload(sexp_t* script);
+static bool variable_check(game_manager_t* gm, char *name);
+static void variable_set(game_manager_t* gm, variable_t set);
 static void video_decode_callback(plm_t* player, plm_frame_t* frame, void* user);
 static plm_t* video_load(game_manager_t* gm, const char* path);
 static void video_play(game_manager_t* gm, plm_t* video, bool cutscene, SDL_Point position);
@@ -268,6 +283,40 @@ audio_decode_callback(plm_t* player, plm_samples_t* samples, void* user)
   if (!SDL_PutAudioStreamData(gm->audio_stream, samples->interleaved, length))
   {
     log_error("SDL_PutAudioStreamData() error: %s", SDL_GetError());
+  }
+}
+
+static bool
+variable_check(game_manager_t* gm, char *name)
+{
+  for (usize i = 0; i < gm->variable_count; ++i)
+  {
+    if (!strcmp(name, gm->variables[i].name))
+    {
+      return gm->variables[i].value;
+    }
+  }
+  return false;
+}
+
+static void
+variable_set(game_manager_t* gm, variable_t set)
+{
+  for (usize i = 0; i < gm->variable_count; ++i)
+  {
+    if (!strcmp(set.name, gm->variables[i].name))
+    {
+      gm->variables[i].value = set.value;
+      return;
+    }
+  }
+  if (gm->variable_count >= kMaxVariables)
+  {
+    log_error("Too many variables set (max=%d).", kMaxVariables);
+  }
+  else
+  {
+    gm->variables[gm->variable_count++] = set;
   }
 }
 
@@ -525,6 +574,9 @@ gamestate_process(game_manager_t* gm)
             gm->scene_current = c.data.target;
             game_stack_pop(gm);
             break;
+          case eStacktypeSet:
+            variable_set(gm, c.data.set);
+            break;
           case eStacktypeNULL:
             break;
           default:
@@ -739,6 +791,14 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
       else if (!strncmp(type, "text", str_length))
       {
         hotspot_stack_push(hs, eStacktypeText, (celldata_t){.text = s->list->next->val});
+      }
+
+      else if (!strncmp(type, "set", str_length))
+      {
+        variable_t set = {
+          .name = s->list->next->val,
+          .value = s->list->next->next->val[0] == 't'};
+        hotspot_stack_push(hs, eStacktypeSet, (celldata_t){.set = set});
       }
     }
 

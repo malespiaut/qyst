@@ -13,7 +13,7 @@
     (hotspot "Click!" (440 40 100 100)
       (
         (sound "data/sounds/click.wav")
-        (target "scene-2")
+        (set unlock t)
       )
     )
   )
