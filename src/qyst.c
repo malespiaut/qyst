@@ -657,6 +657,8 @@ scene_music_load(scene_t* scene, char* path)
     exit(EXIT_FAILURE);
   }
 
+  log_debug("Loading music %s", path);
+
   scene->music_path = path;
 }
 
