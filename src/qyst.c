@@ -1416,7 +1416,7 @@ main(void)
 
   // switch_music() must be placed here to initialize the music loading
   // regardless if the intro have been skipped or not.
-  switch_music(gm, NULL, gm->scene[gm->scene_current]->music_path);
+  switch_music(g_gm, NULL, g_gm->scene[g_gm->scene_current]->music_path);
   while (!g_gm->quit)
   {
     events_process(g_gm);
