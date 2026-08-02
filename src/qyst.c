@@ -494,7 +494,6 @@ gamestate_process(game_manager_t* gm)
       {
         video_unload(gm);
         gm->gamestate = eGamestatePlay;
-        switch_music(gm, NULL, gm->scene[gm->scene_current]->music_path);
       }
       break;
 
@@ -1413,6 +1412,9 @@ main(void)
     intro_play(g_gm);
   }
 
+  // switch_music() must be placed here to initialize the music loading
+  // regardless if the intro have been skipped or not.
+  switch_music(gm, NULL, gm->scene[gm->scene_current]->music_path);
   while (!g_gm->quit)
   {
     events_process(g_gm);
