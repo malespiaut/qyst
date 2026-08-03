@@ -1014,7 +1014,7 @@ game_update(game_manager_t* gm)
       }
     }
 
-    if (gm->video.playing)
+    if (gm->gamestate != eGamestateplay)
     {
       gm->cursor.state = eCursorstateWait;
     }
