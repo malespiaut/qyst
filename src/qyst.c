@@ -53,16 +53,16 @@ enum gamestate_e
 };
 typedef enum gamestate_e gamestate_t;
 
-enum celltype_e
+enum eventtype_e
 {
-  eStacktypeNULL,
-  eStacktypeTarget,
-  eStacktypeVideo,
-  eStacktypeSound,
-  eStacktypeSet,
-  eStacktypeText
+  eEventtypeNULL,
+  eEventtypeTarget,
+  eEventtypeVideo,
+  eEventtypeSound,
+  eEventtypeSet,
+  eEventtypeText
 };
-typedef enum celltype_e celltype_t;
+typedef enum eventtype_e eventtype_t;
 
 typedef struct variable_s variable_t;
 struct variable_s
@@ -79,8 +79,8 @@ struct video_conf_s
   SDL_Point position;
 };
 
-typedef union celldata_u celldata_t;
-union celldata_u
+typedef union eventdata_u eventdata_t;
+union eventdata_u
 {
   i32 target;
   char* path;
@@ -89,11 +89,11 @@ union celldata_u
   variable_t set;
 };
 
-typedef struct cell_s cell_t;
-struct cell_s
+typedef struct event_s event_t;
+struct event_s
 {
-  celltype_t type;
-  celldata_t data;
+  eventtype_t type;
+  eventdata_t data;
 };
 
 typedef union vec2i_u vec2i_t;
@@ -126,7 +126,7 @@ struct hotspot_s
   char* label;
   char* condition;
   SDL_Rect bounds;
-  cell_t stack[32];
+  event_t stack[32];
   isize stack_size;
 };
 
@@ -229,7 +229,7 @@ struct game_manager_s
   usize variable_count;
   variable_t variables[kMaxVariables];
 
-  cell_t (*stack)[32];
+  event_t (*stack)[32];
   isize stack_size;
   isize stack_idx;
 
@@ -251,7 +251,7 @@ static void game_update(game_manager_t* gm);
 static void gamestate_process(game_manager_t* gm);
 static void hotspot_alloc(scene_t* scene);
 static void hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs);
-static void hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data);
+static void hotspot_stack_push(hotspot_t* hs, eventtype_t type, eventdata_t data);
 static void hotspots_draw(game_manager_t* gm);
 static void intro_play(game_manager_t* gm);
 static bool is_autocenter(SDL_Point point);
@@ -598,18 +598,18 @@ gamestate_process(game_manager_t* gm)
       {
         // This is some weird shenanigans that I don't fully understand
         // just because I wanted gm->stack to explicitely be a
-        // pointer to an array of 32 cell_t objects, and not just a
+        // pointer to an array of 32 event_t objects, and not just a
         // poiter to the first element.
-        cell_t c = gm->stack[0][gm->stack_idx];
+        event_t c = gm->stack[0][gm->stack_idx];
 
         switch (c.type)
         {
-          case eStacktypeVideo:
+          case eEventtypeVideo:
             gm->gamestate = eGamestateVideo;
             plm_t* video = video_load(gm, c.data.video_conf.path);
             video_play(gm, video, c.data.video_conf.cutscene, c.data.video_conf.position);
             break;
-          case eStacktypeSound:
+          case eEventtypeSound:
             gm->gamestate = eGamestateSound;
             if (!SDL_LoadWAV(c.data.path, &gm->sound.spec, &gm->sound.data, &gm->sound.data_len))
             {
@@ -627,21 +627,21 @@ gamestate_process(game_manager_t* gm)
             SDL_free(gm->sound.data); // TODO: maybe store sound data in memory a bit longer so it can be reused
             gm->sound = (audio_t){0};
             break;
-          case eStacktypeText:
+          case eEventtypeText:
             game_stack_pop(gm);
             break;
-          case eStacktypeTarget:
+          case eEventtypeTarget:
             scene_t* current_scene = gm->scene[gm->scene_current];
             scene_t* target_scene = gm->scene[c.data.target];
             switch_music(gm, current_scene->music_path, target_scene->music_path);
             gm->scene_current = c.data.target;
             game_stack_pop(gm);
             break;
-          case eStacktypeSet:
+          case eEventtypeSet:
             variable_set(gm, c.data.set);
             game_stack_pop(gm);
             break;
-          case eStacktypeNULL:
+          case eEventtypeNULL:
             break;
           default:
             break;
@@ -784,7 +784,7 @@ scene_id_find(game_manager_t* gm, char* scene_name)
 }
 
 static void
-hotspot_stack_push(hotspot_t* hs, celltype_t type, celldata_t data)
+hotspot_stack_push(hotspot_t* hs, eventtype_t type, eventdata_t data)
 {
   if (!hs)
   {
@@ -826,7 +826,7 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
 
       if (!strncmp(type, "target", str_length))
       {
-        hotspot_stack_push(hs, eStacktypeTarget, (celldata_t){.target = scene_id_find(gm, s->list->next->val)});
+        hotspot_stack_push(hs, eEventtypeTarget, (eventdata_t){.target = scene_id_find(gm, s->list->next->val)});
       }
 
       else if (!strncmp(type, "video", str_length))
@@ -846,17 +846,17 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
         }
         video_conf.path = s->list->next->next->next->val;
 
-        hotspot_stack_push(hs, eStacktypeVideo, (celldata_t){.video_conf = video_conf});
+        hotspot_stack_push(hs, eEventtypeVideo, (eventdata_t){.video_conf = video_conf});
       }
 
       else if (!strncmp(type, "sound", str_length))
       {
-        hotspot_stack_push(hs, eStacktypeSound, (celldata_t){.path = s->list->next->val});
+        hotspot_stack_push(hs, eEventtypeSound, (eventdata_t){.path = s->list->next->val});
       }
 
       else if (!strncmp(type, "text", str_length))
       {
-        hotspot_stack_push(hs, eStacktypeText, (celldata_t){.text = s->list->next->val});
+        hotspot_stack_push(hs, eEventtypeText, (eventdata_t){.text = s->list->next->val});
       }
 
       else if (!strncmp(type, "set", str_length))
@@ -864,7 +864,7 @@ hotspot_parse(game_manager_t* gm, sexp_t* s, hotspot_t* hs)
         variable_t set = {
           .name = s->list->next->val,
           .value = s->list->next->next->val[0] == 't'};
-        hotspot_stack_push(hs, eStacktypeSet, (celldata_t){.set = set});
+        hotspot_stack_push(hs, eEventtypeSet, (eventdata_t){.set = set});
       }
     }
 
