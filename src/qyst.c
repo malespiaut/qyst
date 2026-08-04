@@ -1132,7 +1132,7 @@ game_update(game_manager_t* gm)
       }
     }
 
-    if (gm->gamestate != eGamestateplay)
+    if (gm->gamestate != eGamestatePlay)
     {
       gm->cursor.state = eCursorstateWait;
     }
